@@ -3,7 +3,7 @@
 #include <iostream>
 #include <string>
 void configureCapturedEvaluation(NVSDK_NGX_Parameter* p,const std::array<ID3D12Resource*,5>& t,
-    bool sr,bool reset,bool zeroStrength,float frameMilliseconds) {
+    bool sr,bool reset,bool zeroStrength,float frameMilliseconds,bool diagnostics) {
     if(sr) {
         const char* keys[]={NVSDK_NGX_Parameter_Color,NVSDK_NGX_Parameter_Depth,NVSDK_NGX_Parameter_MotionVectors,NVSDK_NGX_Parameter_Output,NVSDK_NGX_Parameter_ExposureTexture};
         for(unsigned i=0;i<5;++i)p->Set(keys[i],t[i]);
@@ -11,7 +11,7 @@ void configureCapturedEvaluation(NVSDK_NGX_Parameter* p,const std::array<ID3D12R
         p->Set(NVSDK_NGX_Parameter_Jitter_Offset_X,0.f);p->Set(NVSDK_NGX_Parameter_Jitter_Offset_Y,0.f);
         p->Set(NVSDK_NGX_Parameter_MV_Scale_X,1.f);p->Set(NVSDK_NGX_Parameter_MV_Scale_Y,1.f);
         p->Set(NVSDK_NGX_Parameter_DLSS_Pre_Exposure,1.f);p->Set(NVSDK_NGX_Parameter_DLSS_Exposure_Scale,1.f);
-        if(frameMilliseconds>0){p->Set(NVSDK_NGX_Parameter_FrameTimeDeltaInMsec,frameMilliseconds);std::cout<<"SR_FRAME_TIME milliseconds="<<frameMilliseconds<<std::endl;}
+        if(frameMilliseconds>0){p->Set(NVSDK_NGX_Parameter_FrameTimeDeltaInMsec,frameMilliseconds);if(diagnostics)std::cout<<"SR_FRAME_TIME milliseconds="<<frameMilliseconds<<std::endl;}
         p->Set(NVSDK_NGX_Parameter_Sharpness,0.f);
         p->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Width,2560u);p->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Height,1440u);
     } else {
@@ -21,7 +21,7 @@ void configureCapturedEvaluation(NVSDK_NGX_Parameter* p,const std::array<ID3D12R
         p->Set(NVSDK_NGX_Parameter_DLSSNR_DepthInverted,1);
         p->Set(NVSDK_NGX_Parameter_DLSSNR_MVecScaleX,1.f);p->Set(NVSDK_NGX_Parameter_DLSSNR_MVecScaleY,1.f);
         p->Set(NVSDK_NGX_Parameter_Jitter_Offset_X,0.f);p->Set(NVSDK_NGX_Parameter_Jitter_Offset_Y,0.f);
-        std::cout<<"NRStrengthControl="<<(zeroStrength?"all-zero":"reference-settings")<<std::endl;
+        if(diagnostics)std::cout<<"NRStrengthControl="<<(zeroStrength?"all-zero":"reference-settings")<<std::endl;
         p->Set(NVSDK_NGX_Parameter_DLSSNR_Intensity,zeroStrength?0.f:1.f);
         p->Set(NVSDK_NGX_Parameter_DLSSNR_LocalToneStrength,zeroStrength?0.f:.3f);
         p->Set(NVSDK_NGX_Parameter_DLSSNR_LocalStructureStrength,zeroStrength?0.f:.7f);

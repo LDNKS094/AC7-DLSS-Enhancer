@@ -12,7 +12,10 @@ namespace ac7 {
 class SharedTextureBridge {
 public:
     enum class Result { pending, published, discarded };
-    SharedTextureBridge(ID3D11Device*, ID3D12Device*, ID3D12CommandQueue*, uint32_t width, uint32_t height);
+    enum class ColorInput { fp16, ac7NativeHdr };
+    // Native HDR uses AC7's fixed 5120x1440 R11 allocation; output/guides remain 2560x1440.
+    SharedTextureBridge(ID3D11Device*, ID3D12Device*, ID3D12CommandQueue*, uint32_t width, uint32_t height,
+        ColorInput color = ColorInput::fp16);
     SharedTextureBridge(const SharedTextureBridge&) = delete;
     SharedTextureBridge& operator=(const SharedTextureBridge&) = delete;
     void upload(uint64_t frame, const std::array<ID3D11Texture2D*, 4>& inputs);
@@ -38,6 +41,7 @@ private:
     std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, 5> shared12_;
     std::array<Microsoft::WRL::ComPtr<ID3D11Texture2D>, 5> shared11_;
     uint32_t width_, height_;
+    ColorInput color_;
     uint64_t value_ = 0, frame_ = 0;
     bool active_ = false, submitted_ = false, healthy_ = true, hasFrame_ = false, abandoned_ = false;
 };

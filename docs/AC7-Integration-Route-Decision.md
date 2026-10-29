@@ -1,11 +1,19 @@
 # 接入路线决策：保留 OptiScaler 与直接 NGX 两个候选
 
+> **普通设备门槛及View协议已通过独立宿主**：[deferred复制](AC7-Neutral-ASI-Ordinary-Fix.md)与[真实View上传/guide/loader](AC7-View-Identity-ASI-Validation.md)已完成双设备矩阵，默认关闭观察包待用户实际游戏日志。实际主View/启动时序/模型仍未验，不据此扩成自研FG；旧阻塞块保留历史。
+
+> **ASI当前门槛**：[实际hook验证](AC7-Neutral-ASI-Validation.md)在debug宿主通过原Draw/中性/停止，但普通设备未通过；当前没有游戏可部署包。先解决普通设备稳定拦截，再接真实帧/View/guide，不靠模组清理或扩大工具链规避。
+
+> **用户最新实施偏好与宿主进展**：不把其它模组兼容作为前置，先做最直接ASI窄入口；确有冲突再提具体临时移出/恢复清单，不自动清理。[独立中性宿主](AC7-Neutral-Host-Validation.md)已通过默认关闭/无模型、区域/状态/停止控制，下一步ASI hook与原draw继续测试，真实主View/guide语义仍待连接；未部署游戏。
+
+> **同通路对照与工程建议**：[路线对照报告](AC7-Route-Comparison-Validation.md)已完成直接NGX等价和ABBA有限计时，建议下一固定NR/SR原型优先路线2；路线1保留为FG/压缩复用候选，完整宿主和FG架构未选。CPU Evaluate差约0.070ms、GPU差小，不是FPS结论。OverlayMenu=false旧菜单在30帧后泄漏SR输出状态、日志sink全关不静默的配置误解已定位，失败证据保留；隔离默认配置绕开，无参考源码补丁。本段更新工作建议，不代替用户对最终方案的选择。
+
 用户当前决策：现有信息不足以选择最终接入方式。接下来在路线1和路线2之间验证；路线3工作量过大，暂不考虑。不再默认推进ReShade专用中性回接。
 
 | 路线 | 范围 | 当前决策 |
 |---|---|---|
-| 1：薄AC7适配层＋OptiScaler | 自行取得游戏数据并回接，复用现有Pre-SR NR/SR/周边压缩/FG等可用部分 | 优先做独立接口验证，不宣称已兼容AC7 |
-| 2：自研AC7接入＋直接NGX | 复用本项目规范化、HDR代理/恢复、共享资源、模型调用与生命周期验证，先做固定尺寸NR/SR | 保留为同等候选与对照；FG后端另行选择，不自动扩成全自研 |
+| 1：薄AC7适配层＋OptiScaler | 自行取得游戏数据并回接，复用现有Pre-SR NR/SR/周边压缩/FG等可用部分 | 保留候选；公开NR/SR已验证，FG/压缩复用未验 |
+| 2：自研AC7接入＋直接NGX | 复用本项目规范化、HDR代理/恢复、共享资源、模型调用与生命周期验证，先做固定尺寸NR/SR | 下一固定尺寸NR/SR原型的工程优先建议；FG另选，不自动扩成全自研 |
 | 3：完整自研NR/SR/周边压缩/FG呈现基础设施 | 连同FG交换链、UI、帧节奏与延迟全部自行适配维护 | 暂不考虑 |
 
 ## 为什么暂停ReShade专用原型
@@ -15,6 +23,8 @@ ReShade此前选作第一中性验证宿主，是利用已有真实采样入口�
 没有同条件实测能证明ReShade、OptiScaler或自研哪条更快。应分别评估回调/资源跟踪的CPU成本与模型、格式转换、复制、跨API同步的GPU/等待成本，不以框架名称作性能结论。
 
 现独立链为D3D11→D3D12 NR→D3D11 HDR恢复→D3D12 SR→D3D11；验证正确性有价值，但生产路线应比较是否可让NR、HDR恢复和SR在同一D3D12链中执行，减少往返。不能为了复用叠加两套互操作桥。
+
+用户授权的本地提交已为`81021a0`，后续未再提交。[首轮接口](AC7-OptiScaler-Interface-Validation.md)后，自有共享桥＋公开D3D12入口在FL11.0输入上通过[持久八帧历史/Reset](AC7-OptiScaler-Sequence-Validation.md)：16输出对直接NGX逐位、64输入保持、双debug0/完成后清理正常；绕过了OptiScaler自身D3D11层，未修复该层的FL11.0恢复/Shutdown1限制。[D3D12颜色模块](AC7-D3D12-Color-Validation.md)之后，[公开NR与D3D12整链](AC7-OptiScaler-GPU-Chain-Validation.md)已实际执行两组八帧，80阶段逐位、64输入保持、完成后清理/debug0。组合为自有颜色＋公开原生NR转发＋OptiScaler SR，未采用内建NR compose；下一步原始D11输入输出桥和在途deadline/停止已由[共享整链验证](AC7-OptiScaler-Shared-Chain-Validation.md)完成：40正常阶段＋8返回逐位、整链迟到丢弃/双Reset/stop/D11退休通过；仍是fixture初始化、私有输出，在线guide和游戏回调未接。路线仍待同通路成本比较，尚无性能结论。
 
 ## 下一步验证顺序
 

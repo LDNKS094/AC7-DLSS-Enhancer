@@ -14,7 +14,9 @@ void SharedTextureBridge::check(HRESULT hr, const char* stage) {
     if (FAILED(hr)) { healthy_ = false; throw std::runtime_error(std::string(stage) + " HRESULT " + std::to_string(hr)); }
 }
 SharedTextureBridge::SharedTextureBridge(ID3D11Device* d11, ID3D12Device* d12, ID3D12CommandQueue* queue,
-    uint32_t width, uint32_t height) : device11_(d11), device12_(d12), queue_(queue), width_(width), height_(height) {
+    uint32_t width, uint32_t height, ColorInput color) : device11_(d11), device12_(d12), queue_(queue), width_(width), height_(height), color_(color) {
+    if (color != ColorInput::fp16 && color != ColorInput::ac7NativeHdr) throw std::runtime_error("Unknown bridge color layout");
+    if (color == ColorInput::ac7NativeHdr && (width != 2560 || height != 1440)) throw std::runtime_error("Native HDR bridge requires fixed AC7 extent");
     if (!d11 || !d12 || !queue || !width || !height || width > 5120 || height > 1440)
         throw std::runtime_error("Invalid bounded bridge configuration");
     ComPtr<IDXGIDevice> dxgi; check(d11->QueryInterface(IID_PPV_ARGS(&dxgi)));
@@ -32,6 +34,7 @@ SharedTextureBridge::SharedTextureBridge(ID3D11Device* d11, ID3D12Device* d12, I
     for (unsigned i = 0; i < 5; ++i) {
         D3D11_TEXTURE2D_DESC texture{}; texture.Width = i == 3 ? 1 : width; texture.Height = i == 3 ? 1 : height;
         texture.ArraySize = texture.MipLevels = texture.SampleDesc.Count = 1; texture.Format = Formats[i];
+        if(i == 0 && color_ == ColorInput::ac7NativeHdr) { texture.Width = 5120; texture.Format = DXGI_FORMAT_R11G11B10_FLOAT; }
         texture.Usage = D3D11_USAGE_DEFAULT;
         texture.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
         texture.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
@@ -49,7 +52,8 @@ void SharedTextureBridge::validate(ID3D11Texture2D* texture, unsigned index) con
     ComPtr<ID3D11Device> owner; texture->GetDevice(&owner);
     if (owner.Get() != device11_.Get()) throw std::runtime_error("Bridge D3D11 texture device mismatch");
     D3D11_TEXTURE2D_DESC d{}; texture->GetDesc(&d);
-    if (d.Width != (index == 3 ? 1 : width_) || d.Height != (index == 3 ? 1 : height_) || d.Format != Formats[index] ||
+    const bool native = index == 0 && color_ == ColorInput::ac7NativeHdr;
+    if (d.Width != (native ? 5120 : index == 3 ? 1 : width_) || d.Height != (index == 3 ? 1 : height_) || d.Format != (native ? DXGI_FORMAT_R11G11B10_FLOAT : Formats[index]) ||
         d.MipLevels != 1 || d.ArraySize != 1 || d.SampleDesc.Count != 1)
         throw std::runtime_error("Bridge texture layout mismatch");
 }

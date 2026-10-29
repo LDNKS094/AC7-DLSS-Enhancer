@@ -6,7 +6,9 @@
 
 ## 当前状态
 
-**当前路线决策**：信息仍不足以选型，只保留路线1“薄AC7适配＋OptiScaler”和路线2“自研接入＋直接NGX”；完整自研FG的路线3暂不考虑。暂停ReShade专用回接，现有采样插件仅保留诊断用途。本轮记录并提交当前成果后，优先做OptiScaler独立接口与真实输出验证，再决定路线。见[路线决策](docs/AC7-Integration-Route-Decision.md)与[工作计划](PLAN.md)。下方旧ReShade实施建议为历史。
+**当前进展**：[第四轮实际全宽观察通过](docs/AC7-Live-View-Observation-Validation.md)：8个合格真实View身份、绑定关联、零复制、error0并正常停止，16条缓存承受1024次淘汰。合格counter有两帧间隙，不等于连续时间模型验收。当前观察版固定为通过基线，下一阶段再验证全宽中性复制，尚未启用场景修改；NR0/SR0，无自动部署/ZIP/提交，仍81021a0。
+
+**当前路线决策**：信息仍不足以选型，只保留路线1“薄AC7适配＋OptiScaler”和路线2“自研接入＋直接NGX”；完整自研FG的路线3暂不考虑。暂停ReShade专用回接，现有采样插件仅保留诊断用途。一次提交与公开SR单帧/序列验证已完成，接下来核NR颜色合同与两路线成本后再决定。见[路线决策](docs/AC7-Integration-Route-Decision.md)与[工作计划](PLAN.md)。下方旧ReShade实施建议为历史。
 
 最新：[固定会话所有权](docs/AC7-Fixed-Runtime-Ownership-Validation.md)已通过4次实际模型/pass重建与安全关闭、部分初始化拒绝、六份恢复参考和正常56阶段回归。下一步按[最小游戏测试路径](docs/AC7-Minimal-Game-Test-Path.md)，用已有ReShade公开回调构建默认关闭、固定尺寸、不加载NGX的中性回接。动态resize不再作为首次中性测试前置；同帧曝光与模型完成时序仍需后续解决，当前未部署或测试游戏。以下为前阶段记录。
 
@@ -25,6 +27,17 @@
 
 | 文档 | 用途 |
 | --- | --- |
+| [首轮实际日志/宽屏诊断](docs/AC7-Game-Entry-Diagnostics.md) | 实际启动已验，双布局只观察与一次性拒绝诊断待下一份游戏日志 |
+| [View身份/guide/loader](docs/AC7-View-Identity-ASI-Validation.md) | 独立八帧/拒绝/丢帧恢复通过，默认关闭包待用户游戏日志 |
+| [普通设备ASI修复](docs/AC7-Neutral-ASI-Ordinary-Fix.md) | deferred复制路径双设备完整矩阵通过；真实帧/View与loader待接 |
+| [ASI早期失败记录](docs/AC7-Neutral-ASI-Validation.md) | 原始普通设备失败与替换诊断，当前修复见上条 |
+| [中性宿主验证](docs/AC7-Neutral-Host-Validation.md) | 独立D11默认关闭/精确匹配/区域状态与停止通过；ASI窄hook下一步 |
+| [同通路路线对照](docs/AC7-Route-Comparison-Validation.md) | 直接NGX等价、有限ABBA计时/菜单配置勘误；建议固定NR/SR优先路线2 |
+| [原始HDR共享整链](docs/AC7-OptiScaler-Shared-Chain-Validation.md) | 单桥/整链发布/迟到丢弃/双Reset/停止退休通过，私有输出限制 |
+| [OptiScaler公开整链](docs/AC7-OptiScaler-GPU-Chain-Validation.md) | 独立NR及同D3D12颜色→NR→HDR→SR，80阶段逐位；桥/在途停止待验 |
+| [D3D12颜色验证](docs/AC7-D3D12-Color-Validation.md) | 48阶段双参考逐位、FP16代理/R11恢复/FP16颜色；分段接模型待验 |
+| [OptiScaler八帧验证](docs/AC7-OptiScaler-Sequence-Validation.md) | 持久SR历史/Reset16输出逐位、64输入保持、双debug0；NR颜色合同待验证 |
+| [OptiScaler接口验证](docs/AC7-OptiScaler-Interface-Validation.md) | 公开D3D12入口＋自有桥在FL11.0正常执行/清理；NR/FG与性能待验 |
 | [接入路线决策](docs/AC7-Integration-Route-Decision.md) | 路线1/2候选、路线3暂缓；OptiScaler独立接口验证优先 |
 | [固定会话所有权](docs/AC7-Fixed-Runtime-Ownership-Validation.md) | 实际模型/pass重建、安全关闭与部分构造拒绝验证 |
 | [最小游戏测试路径](docs/AC7-Minimal-Game-Test-Path.md) | 默认关闭的ReShade中性回接先行；模型同帧时序后接 |

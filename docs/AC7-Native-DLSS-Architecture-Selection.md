@@ -1,5 +1,15 @@
 # AC7 原生 DLSS 架构选型调查
 
+> **ASI复制与View协议**：[私有deferred复制](AC7-Neutral-ASI-Ordinary-Fix.md)及[真实View上传/guide/loader](AC7-View-Identity-ASI-Validation.md)已过独立普通/debug矩阵。已准备默认关闭观察包，下一步用户实际游戏日志确认主View/启动时序；仍未验实际游戏复制/模型/性能，不扩成自研FG。
+
+> **ASI门槛更新**：[debug实际hook验证](AC7-Neutral-ASI-Validation.md)通过加载/原draw8/中性2/像素状态/停止，普通设备hook仍不合格，无可部署游戏包。先解决该具体阻塞，不把debug资格等同游戏接入，也不默认回到ReShade或深改工具链。
+
+> **中性宿主进展**：[独立D11中性入口](AC7-Neutral-Host-Validation.md)已通过全scene/crop、管线快照/UAVcounter/原CS继续、拒绝与stop-drain，hook0/model0。用户要求最直接实现优先、不以模组兼容前置；下一步ASI窄hook合成验证，再实际view/guide/token关联，遇具体冲突再提可恢复清理清单，不部署/启动游戏。
+
+> **同通路比较完成**：[对照报告](AC7-Route-Comparison-Validation.md)记录direct40阶段＋8返回逐位、ABBA各64有效样本：NR/SR Evaluate CPU约0.388/0.318ms，D12颜色/模型GPU约4.031/4.003ms，不能转换游戏FPS。工程建议下一固定NR/SR优先直接NGX，保留OptiScaler作FG/压缩候选，完整宿主未选。Opti legacy菜单30帧后状态泄漏与logger配置勘误已保留并在隔离host绕开，无源码patch。最新Opti累计NR198/SR218，直接本阶段88/88。
+
+> **提交后实测**：自有共享桥＋OptiScaler公开D3D12入口在FL11.0输入上通过[持久八帧历史/Reset](AC7-OptiScaler-Sequence-Validation.md)，16输出对直接NGX逐位、64输入保持、双API debug0、完成后清理正常；累计NR0/SR21。[公开NR与D3D12整链](AC7-OptiScaler-GPU-Chain-Validation.md)已通过独立NR及同queue/list真实八帧历史/SRReset，80阶段逐位/64输入保持/debug0，后续[原始HDR共享整链](AC7-OptiScaler-Shared-Chain-Validation.md)完成单桥正常40阶段＋8返回、deadline/late-drop/双Reset/stop与D11退休，Opti累计NR47/SR67；当前转向同通路路线成本比较，在线guide/游戏回调未接，路线未选。无FG/性能/游戏验收。其D3D11包装层FL11.0恢复/Shutdown1问题仍保留，详见[首轮接口](AC7-OptiScaler-Interface-Validation.md)。提交仍81021a0，之后改动未再提交。
+
 > **用户最新决策**：仅比较路线1“薄AC7适配＋OptiScaler”和路线2“自研接入＋直接NGX先NR/SR”；路线3完整自研FG暂不考虑。暂停ReShade专用原型，不把其采样成功当最终路线。先独立验证OptiScaler导出/生命周期/真实输出及HDR链兼容，再比较复制同步和复用成本。详见[路线决策](AC7-Integration-Route-Decision.md)。下方ReShade实施建议是此前提案，已暂停。
 
 > 当前第一原型范围已确定：复用已有ReShade公开API20回调，先做默认关闭、固定尺寸、不加载模型的中性回接与游戏smoke test。完整NR/SR/FG后端仍未选定。独立固定会话所有权与实际特性重建已通过；首次中性测试不等待动态resize完成。详见[最小游戏测试路径](AC7-Minimal-Game-Test-Path.md)与[会话验证](AC7-Fixed-Runtime-Ownership-Validation.md)。下方为历史调查，旧“相邻帧未取得/无模型桥”不再表示当前进度。

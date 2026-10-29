@@ -1,8 +1,10 @@
 # AC7 原生渲染适配推进计划
 
-**一句话状态**：路线尚未决定；保留路线1（薄AC7适配＋OptiScaler）与路线2（自研接入＋直接NGX），路线3完整自研FG暂不考虑。暂停ReShade专用回接，提交当前成果后先验证OptiScaler独立接口。见[路线决策](docs/AC7-Integration-Route-Decision.md)。
+**一句话状态**：提交仍`81021a0`。[第四轮实际观察通过](docs/AC7-Live-View-Observation-Validation.md)：原生全宽View/guide绑定关联、8合格真实counter62/63/64/66/68/69/70/71，observed8/error0/applied0/bounded-stop/drained1。缓存16条、淘汰1024次，轮换修复实机有效。65明确时钟/计数拒绝，67未接受且精确原因未重报，不能称连续8帧或模型验收。当前观察版固定通过基线；下一阶段才是独立验证全宽中性复制及原warp同帧消费，无自动启用/部署/ZIP/新提交。
 
 本文只保留目标、当前状态、接下来的阶段和固定约束。逐次验证细节、失败记录与旧版完整流水账见 [修改前完整归档](history/planning/PLAN-before-readability-cleanup.md) 及第 6 节的证据入口。
+
+**用户最新调整**：当前直接用本地构建ASI和日志验证，不再创建ZIP/发行包；历史打包记录仅作证据，ZIP当前已不在工作区，不重建。ASI不依赖ReShade，旧采样诊断可备用，没有具体冲突不主动清理。下文已有包路径只是历史产物，不是操作前提。
 
 ## 1. 目标与处理链
 
@@ -30,6 +32,25 @@
 - 固定尺寸 `NonblockingChain` 原型已按单次调用推进；NR/SR各16次受阻pending、停止拒新帧、D3D11和模型共同退休后销毁、三次驱动实例重建与双Reset通过。自有scene/exposure快照使调用后源覆盖仍能正确恢复HDR；六份输出与原始输入参考逐位。见 [单步驱动与退休](docs/AC7-Nonblocking-Chain-Validation.md)。
 - 调用方报告处理错误后，驱动保留首次原因、隐藏输出、拒绝新帧，健康的NR/SR在途工作可正常退休。三处错误注入、六份恢复参考及正常56阶段回归通过；不等于真实API或设备失效验收。见 [错误停用与退休](docs/AC7-Chain-Error-Stop-Validation.md)。
 - `FixedRuntime`统一持有转换资源、NR/SR与驱动，4次会话实际重建，32次受阻关闭保留资源、退休后释放；部分构造上下文不匹配能回收已创建特性，六份恢复/历史输出逐位。见 [固定会话所有权](docs/AC7-Fixed-Runtime-Ownership-Validation.md)。
+- OptiScaler标准包的[首轮公开接口](docs/AC7-OptiScaler-Interface-Validation.md)已核验，后续自有共享桥＋公开D3D12入口在FL11.0上完成持久八帧历史/逐帧Reset：16输出与直接NGX逐位、64输入保持、双debug0和完成后清理正常。累计NR0/SR21；其D3D11包装层FL11.0/Shutdown1限制仍保留。见[八帧验证](docs/AC7-OptiScaler-Sequence-Validation.md)。
+
+- D3D12颜色模块复用同一HLSL，真实八帧中性/非中性48阶段分别对本轮D3D11与旧基线逐位；32输入保持、6参数/3配对拒绝、3非法模型像素保原图，GPU验证及双debug0。prepare/restore可分段接模型；本轮NR0/SR0，非中性用旧NR样本。代理实际RGBA16F，已更正上轮R8误写。见[颜色验证](docs/AC7-D3D12-Color-Validation.md)。
+
+- OptiScaler公开独立feature18 NR首帧逐位通过，随后自有D3D12颜色→实际NR→HDR恢复→实际SR完成历史8帧与SR逐帧Reset8帧，80阶段逐位、64输入保持、两特性/资源持久、完成后清理与双debug0；内建NR pipeline关闭，无源码补丁。本轮NR17/SR16、Opti累计NR17/SR37。见[公开整链验证](docs/AC7-OptiScaler-GPU-Chain-Validation.md)。
+
+- 原始D3D11 R11输入/规范引导与私有输出已接单共享桥，最终正常8帧40阶段＋8返回逐位；覆写四源后快照保持、整链过期/晚首poll/忙帧/stop拒新与双Reset恢复、D11复制fence退休通过，旧FP16 transport实际回归。阶段NR30/SR30、Opti累计47/67；仍独立fixture初始化、非游戏回接。见[共享整链与发布退休](docs/AC7-OptiScaler-Shared-Chain-Validation.md)。
+
+- 同通路直接NGX的40阶段＋8返回逐位；4进程ABBA两路线各64有效计时样本/debug0/末帧精确，CPU差约0.070ms、GPU差小且波动，不是FPS验收。Opti失败40＋31次保留/排除，旧菜单30帧后COPY_SOURCE泄漏/全关sink不静默已定位，未改参考源码；配置勘误见[路线对照](docs/AC7-Route-Comparison-Validation.md)。本阶段Opti151/151累计198/218，直接88/88。
+
+- 默认关闭无模型中性入口的独立合成D11 FL11.0验证通过：准确prewarp字节码注册/viewport与场景depth-View绑定形状、全scene和中央crop逐位、六stage/IA/RS/OM快照、CS隐藏counter及原CS继续、6绑定/时序拒绝与gate8pending/stop-drain/debug0。无hook/真实原warp draw/模型；见[中性宿主](docs/AC7-Neutral-Host-Validation.md)。
+
+- ASI真实LoadLibrary/InitializeASI、debug设备双公开入口CreatePS/DrawIndexed hook已通过：原draw8次、中性2次、6份绘制输出与scene逐位、状态/pending8/停止debug0；shader替换停用控制通过。当时普通设备未通过（已由下条deferred路径修复），两个vtable实验废弃，普通核心和活动query单测通过；模型0。见[ASI验证与准确阻塞](docs/AC7-Neutral-ASI-Validation.md)。
+
+- 普通设备ASI复制路径修复：分步透明/getter/swap通过、直接copy（无fence）触发device hung；换私有deferred context录制＋ExecuteCommandList(TRUE)，普通/debug完整hook矩阵及中性核心/替换回归全部通过。默认已用新路径，临时诊断开关移出正常构建，保留失败/source证据。见[修复与资格边界](docs/AC7-Neutral-ASI-Ordinary-Fix.md)。
+
+- View身份协议与默认关闭包：完整4096字节View由Map/Unmap、Update/Update1观察，counter137.y扩64位，双时钟/rect/零jitter/CB range验证；精确guide shader/depth/MV/View/viewport及完整字节匹配。GPU copy/未知CL作废缓存。原八帧普通/debug各中性8、默认off观测8复制0，12拒绝全原draw正确；在途699跳过且不晚补、700恢复通过。已安装UAL副本独立实际自动Initialize通过，实际AC7启动待用户只观察日志。包/独立核验/负对照见[View ASI报告](docs/AC7-View-Identity-ASI-Validation.md)。
+
+- 首轮实际游戏日志确认Initialize/installed与双shader捕获，未确认View。用户启用宽屏补丁，旧固定中央协议不足；新中央/全宽只观察、error13拒绝全宽复制、一次性context/CB/上传/拒绝诊断已通过独立测试。原日志/旧ASI完整保留，不新打ZIP、不自动移除补丁或ReShade。见[实际入口诊断](docs/AC7-Game-Entry-Diagnostics.md)。
 
 **尚未完成**
 
@@ -58,8 +79,11 @@
 
 工作：
 
-- 核实OptiScaler版本、导出、现成产物、构建依赖与全局配置；先在非AC7独立宿主验证SR的初始化、特性创建/执行、明确输入输出及销毁。
-- 检查真实执行阶段和输出，不能以Success代表求值；再核Pre-SR NR的SDR/HDR合同与周边颜色/guide布局，避免静默旁路。
+- 自有共享桥＋OptiScaler公开D3D12 SR的持久八帧/Reset和完成后清理已通过。仍仅使用这一套桥；OptiScaler自身D3D11层的FL11.0/Shutdown1限制不称已修复，在途停止/迟到丢弃还未移植验证。
+- 同通路对照已完成。工程建议下一固定尺寸NR/SR原型优先直接NGX，复用现有颜色/桥/发布控制；路线1继续保留作FG/压缩候选，完整游戏宿主/FG架构未选，路线3暂缓。具体数字/菜单与日志配置勘误见[对照报告](docs/AC7-Route-Comparison-Validation.md)。
+- 默认关闭观察已实际通过，不再重复同一轮。下一阶段补全宽5120中性复制路径，先独立验证scene/状态/退休/原Draw继续，再准备明确的用户8帧中性试验；当前全宽复制仍禁止。
+- 实际合格帧中有65/67间隙，65明确frame-clock-counter拒绝，67精确原因未重报。模型历史前核时钟断链和Reset，不放宽或补假帧；当前像素/guide内容/模型/FG/性能未验。见[实机观察边界](docs/AC7-Live-View-Observation-Validation.md)。
+- 本项目代理为FP16，上轮R8是文档误写。OptiScaler在此次FP16输入下也用FP16；默认SoftKnee/sRGB及compose/MaxRatio2仍与已有ACES/2.2差分政策不同。实际NR须用原始prewarp HDR，不能复用已NR的SR输入或暗中套默认限幅；P校准继续延后。
 - 与本项目直接NGX的合格输入对照，比较所需窄改动、复制/同步点和生命周期；研究NR→HDR恢复→SR留在同一D3D12链的可能，避免叠加互操作桥。
 - 路线1是薄AC7适配＋OptiScaler，路线2是自研接入＋直接NGX先做NR/SR、FG另选。路线3完整自研FG暂缓；ReShade专用中性原型暂停，诊断采样成果保留。
 
@@ -115,14 +139,14 @@
 - **曝光与 jitter**：P=1 未校准但不阻塞，预曝光调查延后。jitter 实际记为 0；需要非零值时，必须由游戏实际渲染应用。
 - **抗锯齿**：FXAA 是游戏内唯一选项；不把辅助滤波称为 TAA。
 - **工程边界**：只做窄接口适配。若路线需要深入修改工具链或侵入引擎，超出范围即停止该路线并重新评估。
-- **提交**：用户授权本轮在记录路线决策后创建一次本地提交，再进行接口验证；不push，后续验证改动不自动再次提交。
+- **提交**：已按授权创建本地提交`81021a0`，未push；提交后的OptiScaler验证代码/报告尚未提交，不自动再提交。
 - **时间**：本计划不含时间估计；文档整理不等于已取得运行采样。
 
 ## 6. 证据入口
 
 下列为各主题的代表性报告，完整历史见归档。
 
-- 当前决策：[路线1/2比较与验证顺序](docs/AC7-Integration-Route-Decision.md)。
+- 当前决策：[路线1/2比较与验证顺序](docs/AC7-Integration-Route-Decision.md)；最新结果：[OptiScaler接口验证](docs/AC7-OptiScaler-Interface-Validation.md)。
 - 当前最新：[固定会话所有权](docs/AC7-Fixed-Runtime-Ownership-Validation.md)、[最小游戏测试路径](docs/AC7-Minimal-Game-Test-Path.md)、[错误停用与退休](docs/AC7-Chain-Error-Stop-Validation.md)、[单步驱动与退休](docs/AC7-Nonblocking-Chain-Validation.md)、[整链调度策略](docs/AC7-Chain-Schedule-Validation.md)、[帧提交与源覆盖](docs/AC7-Frame-Submission-Validation.md)、[GPU 数据链](docs/AC7-GPU-Chain-Validation.md)、[等待预算与退休](docs/AC7-Deadline-Retirement-Validation.md)
 - 共享桥与模型：[共享传输](docs/AC7-Shared-Bridge-Validation.md)、[共享模型](docs/AC7-Shared-Model-Validation.md)
 - 实机动态样本：[动态八帧](docs/AC7-Dynamic-Eight-Frame-Validation.md)、[实机样本离线 NR/SR 八帧](docs/AC7-Live-Eight-NR-SR-Validation.md)、[动态两帧](docs/AC7-Dynamic-Live-Pair-Validation.md)、[首次两帧](docs/AC7-First-Live-Pair-Validation.md)

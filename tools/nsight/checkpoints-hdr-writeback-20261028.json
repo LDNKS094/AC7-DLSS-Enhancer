@@ -1,0 +1,12 @@
+{
+  "capture":"Ace7Game__2026_10_28__02_30_38",
+  "checkpoints":[
+    {"draw":467,"file":"Frame0Part01.cpp","dumps":[{"name":"scene-hdr","resource":"pID3D11Texture2D_uid_1645"}]},
+    {"draw":481,"file":"Frame0Part01.cpp","dumps":[{"name":"exposure-before","resource":"pID3D11Resource_uid_1597"},{"name":"luminance-reduction","resource":"pID3D11Texture2D_uid_55846"}]},
+    {"draw":482,"file":"Frame0Part01.cpp","dumps":[{"name":"exposure-after","resource":"pID3D11Texture2D_uid_55850"}]},
+    {"draw":525,"file":"Frame0Part01.cpp","dumps":[{"name":"tonemap-exposure","resource":"pID3D11Texture2D_uid_55850"},{"name":"post-tonemap","resource":"pID3D11Texture2D_uid_1633"}]},
+    {"draw":528,"file":"Frame0Part01.cpp","dumps":[{"name":"post-effects","resource":"pID3D11Texture2D_uid_57543"}]},
+    {"draw":545,"file":"Frame0Part01.cpp","dumps":[{"name":"ui-layer","resource":"pID3D11Texture2D_uid_1735"},{"name":"ui-aux-849","resource":"pID3D11Texture2D_uid_4515"},{"name":"ui-aux-850","resource":"pID3D11Texture2D_uid_4519"},{"name":"composite","swapchain":"pIDXGISwapChain_uid_245"}]},
+    {"draw":546,"file":"Frame0Part01.cpp","dumps":[{"name":"final","swapchain":"pIDXGISwapChain_uid_245"}]}
+  ]
+}

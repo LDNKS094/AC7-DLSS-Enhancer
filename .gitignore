@@ -1,0 +1,7 @@
+/build/
+/artifacts/
+/NVIDIA Nsight Graphics/
+/history/renderdoc/diagnostics/
+/.vs/
+__pycache__/
+*.user

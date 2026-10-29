@@ -1,0 +1,24 @@
+{
+  "validation": "passed against downloaded release metadata; GPU execution and actual UI import untested",
+  "release_version": "0.6.11",
+  "release_commit": "4fc74a196993c883ce2f01e96e8ed8d81f1490e6",
+  "preset_sha256": "c3420ac01cc2d965937461581771c0ae3674eda018434cd412d7e5b0e1c6fb30",
+  "groups_checked": 3,
+  "effects_found": [
+    "Magpie-Experimental-x64/effects/DLSS/DLSS_SR.hlsl",
+    "Magpie-Experimental-x64/effects/DLSSFG/DLSS_FrameGeneration.hlsl",
+    "Magpie-Experimental-x64/effects/DLSSNR/DLSSNR_AI_Filter.hlsl",
+    "Magpie-Experimental-x64/effects/FrameRate_Filter.hlsl"
+  ],
+  "checks": [
+    "release feature flags enabled",
+    "all effect files present",
+    "parameter names and types match release",
+    "parameter ranges and enum choices valid",
+    "NR precedes SR with same-size output",
+    "SR fits target display",
+    "at most one FG, last and 2x"
+  ],
+  "runtime_tested": false,
+  "settings_modified": false
+}

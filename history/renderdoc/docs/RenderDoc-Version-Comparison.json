@@ -1,0 +1,44 @@
+{
+  "status": "1.45 target PID 84600 also failed with user-reported 0x887A0020; version-only explanation weakened",
+  "comparisonResult": {"targetPid": 84600, "injectedVersionVerified": "1.45", "presentingLocalTime": "06:15:55", "connectionResetLocalTime": "06:16:02", "commandLine": "-windowed", "workingDirectoryExplicit": true, "debuggerDelay": 0, "userErrorCode": "0x887A0020", "evidenceDirectory": "../artifacts/diagnostics/renderdoc-1.45-failure"},
+  "hypothesis": "Whether observed DXGI_ERROR_DRIVER_INTERNAL_ERROR depends on the RenderDoc version",
+  "baseline": {"version": "1.46", "uiPid": 97952, "latestFailedTargetPid": 139516, "error": "0x887A0020", "commandLine": "-windowed"},
+  "candidate": {
+    "version": "1.45",
+    "commit": "2fc0bc04cb95499635f63986a55bc6f67849dd9f",
+    "releaseDate": "2026-07-02",
+    "releaseNotes": "https://github.com/baldurk/renderdoc/releases/tag/v1.45",
+    "officialBuilds": "https://renderdoc.org/builds",
+    "download": "https://renderdoc.org/stable/1.45/RenderDoc_1.45_64.zip",
+    "archiveBytes": 97805614,
+    "archiveSha256LocallyComputed": "bd665c348a8245d10a1f513e35b83603edc1a78006277583d09ec0769286eea4",
+    "directory": "E:/CodingProject/AC8_MOZA/AC7-Native-Adapter/artifacts/tools/renderdoc-1.45/portable/RenderDoc_1.45_64",
+    "uiPid": 134392,
+    "windowTitle": "RenderDoc v1.45",
+    "uiResponding": true,
+    "loadedCoreDllVerifiedFromCandidateDirectory": true,
+    "cliVersionVerified": true,
+    "d3d11StartupProbe": "Identified NVIDIA GeForce RTX 5080 and driver 32.0.16.1742",
+    "platformDocumentation": "Official v1.45 README lists Windows and D3D11 support; no AC7/RTX 5080-specific guarantee found",
+    "gameCaptureQualified": false
+  },
+  "coreAuthenticode": {
+    "status": "Valid for all four checked files",
+    "signer": "Baldur Scott Karlsson",
+    "files": [
+      {"name": "qrenderdoc.exe", "version": "1.45.0.0", "sha256": "c9904905fe380b2869d48c7a4209c2331370e0bfda502a24da26ec4031cf885b"},
+      {"name": "renderdoccmd.exe", "version": "1.45.0.0", "sha256": "273352017e23e890fe9134de0157d1fe556676a4c6004bfe3265db1a4648ed07"},
+      {"name": "renderdoc.dll", "version": "1.45.0.0", "sha256": "313f450bfa1f7f7d5f50cc7ee80d9f99b68d3fe873e25eb865ff0433e359f7b3"},
+      {"name": "renderdocshim64.dll", "version": null, "note": "No version resource; bundled in the same official ZIP, valid signer", "sha256": "1a322b53fac4b484107c507a4a5111f362860f6c80b0bf011a2ed96ad78c1ae3"}
+    ]
+  },
+  "capturePreset": "Presets/RenderDoc-AC7-Windowed.cap",
+  "capturePresetSemanticallyMatchesActual146SettingsBeforeLaunch": true,
+  "fixedConditions": ["driver", "mod-free game files", "App ID 502500", "working directory", "command line -windowed", "delayForDebugger=0", "capture options", "user display settings"],
+  "profileBackup": "../artifacts/diagnostics/renderdoc-1.45-comparison/profile-before",
+  "knownNotice": "CLI reports Vulkan layer registration conflict from side-by-side versions; no registration repair performed; test is D3D11",
+  "installed146Replaced": false,
+  "dllCopiedToGame": false,
+  "gameLaunchedByAssistantForThisVersionTest": false,
+  "rollback": "Close portable 1.45 and continue using installed 1.46. Do not restore profile backups over a running UI or overwrite newer user changes. Mod backup remains separate."
+}

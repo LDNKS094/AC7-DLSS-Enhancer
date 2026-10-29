@@ -1,0 +1,108 @@
+{
+  "scalingModes": [
+    {
+      "name": "AC7 A - SR - 60 base",
+      "effects": [
+        {
+          "name": "FrameRate_Filter",
+          "scalingType": 0,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": { "frameRateMode": 1, "targetFrameRate": 60 }
+        },
+        {
+          "name": "DLSS\\DLSS_SR",
+          "scalingType": 1,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": {
+            "renderPreset": 11,
+            "opticalFlowMethod": 2,
+            "nvidiaOpticalFlowQuality": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "AC7 B - PreSR NR + SR - 60 base",
+      "effects": [
+        {
+          "name": "FrameRate_Filter",
+          "scalingType": 0,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": { "frameRateMode": 1, "targetFrameRate": 60 }
+        },
+        {
+          "name": "DLSSNR\\DLSSNR_AI_Filter",
+          "scalingType": 0,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": {
+            "multiPass": 1,
+            "style": 0,
+            "intensity": 1,
+            "enableInputResolutionScaling": 0,
+            "inputResolutionPercent": 100,
+            "antiFlicker": 0,
+            "opticalFlowMethod": 2,
+            "nvidiaOpticalFlowQuality": 2
+          }
+        },
+        {
+          "name": "DLSS\\DLSS_SR",
+          "scalingType": 1,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": {
+            "renderPreset": 11,
+            "opticalFlowMethod": 2,
+            "nvidiaOpticalFlowQuality": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "AC7 C - PreSR NR + SR + FG2x - 60 base",
+      "effects": [
+        {
+          "name": "FrameRate_Filter",
+          "scalingType": 0,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": { "frameRateMode": 1, "targetFrameRate": 60 }
+        },
+        {
+          "name": "DLSSNR\\DLSSNR_AI_Filter",
+          "scalingType": 0,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": {
+            "multiPass": 1,
+            "style": 0,
+            "intensity": 1,
+            "enableInputResolutionScaling": 0,
+            "inputResolutionPercent": 100,
+            "antiFlicker": 0,
+            "opticalFlowMethod": 2,
+            "nvidiaOpticalFlowQuality": 2
+          }
+        },
+        {
+          "name": "DLSS\\DLSS_SR",
+          "scalingType": 1,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": {
+            "renderPreset": 11,
+            "opticalFlowMethod": 2,
+            "nvidiaOpticalFlowQuality": 2
+          }
+        },
+        {
+          "name": "DLSSFG\\DLSS_FrameGeneration",
+          "scalingType": 0,
+          "scale": { "x": 1, "y": 1 },
+          "parameters": {
+            "multiplier": 2,
+            "renderPreset": 0,
+            "opticalFlowMethod": 2,
+            "nvidiaOpticalFlowQuality": 2
+          }
+        }
+      ]
+    }
+  ]
+}

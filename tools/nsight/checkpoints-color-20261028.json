@@ -1,0 +1,10 @@
+{
+  "capture":"Ace7Game__2026_10_28__02_30_38",
+  "checkpoints":[
+    {"draw":467,"file":"Frame0Part01.cpp","dumps":[{"name":"scene-hdr","resource":"pID3D11Texture2D_uid_1645"}]},
+    {"draw":481,"file":"Frame0Part01.cpp","dumps":[{"name":"exposure-before","resource":"pID3D11Resource_uid_1597"},{"name":"luminance-reduction","resource":"pID3D11Texture2D_uid_55846"}]},
+    {"draw":482,"file":"Frame0Part01.cpp","dumps":[{"name":"exposure-after","resource":"pID3D11Texture2D_uid_55850"}]},
+    {"draw":525,"file":"Frame0Part01.cpp","dumps":[{"name":"tonemap-exposure","resource":"pID3D11Texture2D_uid_55850"},{"name":"post-tonemap","resource":"pID3D11Texture2D_uid_1633"}]},
+    {"draw":546,"file":"Frame0Part01.cpp","dumps":[{"name":"final","swapchain":"pIDXGISwapChain_uid_245"}]}
+  ]
+}

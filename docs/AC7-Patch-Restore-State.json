@@ -1,0 +1,21 @@
+{
+  "status": "original patch environment restored; runtime qualification pending",
+  "authorization": "user requested restoring patches for actual work",
+  "gameWasRunningDuringRestore": false,
+  "gameDirectory": "F:/SteamLibrary/steamapps/common/ACE COMBAT 7",
+  "backupDirectory": "E:/CodingProject/AC8_MOZA/AC7-Native-Adapter/artifacts/backups/clean-renderdoc-baseline",
+  "inventoryReference": "AC7-Clean-Test-State.json",
+  "restoredEntries": ["dinput8.dll", "dwmapi.dll", "AC7HUDCenter.asi", "AC7SceneProjection.asi", "AC7HUDCenter.log", "AC7SceneProjection.log", "ue4ss"],
+  "restoredFiles": 20,
+  "sha256AllMatchOriginalInventory": true,
+  "existingFilesOverwritten": false,
+  "backupRetained": true,
+  "ue4ssConfigurationChanged": false,
+  "telemetryLuaRestoredUnchanged": true,
+  "temporaryAppId": "502500 retained for Nsight direct launch",
+  "renderdocAsiRestored": false,
+  "driverOrSystemSettingsChanged": false,
+  "newGameLaunchPerformed": false,
+  "evidenceBoundary": "Existing flight frame and event/resource IDs describe the unpatched baseline; new runtime qualification and capture are required for the restored ultrawide environment. Old event IDs must not be applied to a new frame.",
+  "nextStep": "Nsight 2025.5 Frame Debugger, previous working direct launch with -windowed and no debug runtime; first verify menu and patch activation, then capture mission1 Free Flight external view with F11 into a new directory. If it fails, preserve error and isolate patches one at a time rather than repeat broad changes."
+}

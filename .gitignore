@@ -1,3 +1,8 @@
+/development/build/
+/development/artifacts/
+/development/history/nsight-generated/
+/development/history/legacy/renderdoc/diagnostics/
+/development/history/game-cleanup/payload-*/
 /build/
 /artifacts/
 /NVIDIA Nsight Graphics/

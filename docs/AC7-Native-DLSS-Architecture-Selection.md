@@ -1,5 +1,9 @@
 # AC7 原生 DLSS 架构选型调查
 
+> **用户最新决策**：仅比较路线1“薄AC7适配＋OptiScaler”和路线2“自研接入＋直接NGX先NR/SR”；路线3完整自研FG暂不考虑。暂停ReShade专用原型，不把其采样成功当最终路线。先独立验证OptiScaler导出/生命周期/真实输出及HDR链兼容，再比较复制同步和复用成本。详见[路线决策](AC7-Integration-Route-Decision.md)。下方ReShade实施建议是此前提案，已暂停。
+
+> 当前第一原型范围已确定：复用已有ReShade公开API20回调，先做默认关闭、固定尺寸、不加载模型的中性回接与游戏smoke test。完整NR/SR/FG后端仍未选定。独立固定会话所有权与实际特性重建已通过；首次中性测试不等待动态resize完成。详见[最小游戏测试路径](AC7-Minimal-Game-Test-Path.md)与[会话验证](AC7-Fixed-Runtime-Ownership-Validation.md)。下方为历史调查，旧“相邻帧未取得/无模型桥”不再表示当前进度。
+
 > 最新[prewarp新配对链](AC7-Prewarp-NR-SR-Validation.md)：465后/466前新GPU代理→新NR→GPU恢复HDR→新SR(P1/Reset)→原warp/后处理/UI已离线通过，旧postwarp结果未混用；FXAA可保留/有效区RGB旁路。下一门槛真实连续帧/jitter/history，不提前选宿主/桥，不把单Reset成功当高输出或时域验收。
 
 > 最新[SR同尺寸离线回接](AC7-SR-Writeback-Validation.md)已完成NR→恢复HDR→SR(P1/Reset)→原空间AA/后处理/UI→最终帧，旁路12项逐位、区外0变化、UI逐位。用户确认菜单只有FXAA，无TAA选项；本轮保留FXAA，后续旁路对照，再验证候选位置与guides/连续帧。P调查延后，仍未实时接入、高输出或选定宿主/桥。下文旧“未SR回接”按历史阶段读取。

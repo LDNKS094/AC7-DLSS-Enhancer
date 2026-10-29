@@ -1,110 +1,137 @@
-# 工作计划
+# AC7 原生渲染适配推进计划
 
-## 当前决策
+**一句话状态**：路线尚未决定；保留路线1（薄AC7适配＋OptiScaler）与路线2（自研接入＋直接NGX），路线3完整自研FG暂不考虑。暂停ReShade专用回接，提交当前成果后先验证OptiScaler独立接口。见[路线决策](docs/AC7-Integration-Route-Decision.md)。
 
-项目独立组织，研究范围是普通屏幕的 AC7 原生适配。后端和进程结构尚未选定。Luma、OptiScaler、Magpie 及其他项目均为参考或候选，不能以通用功能列表代替 AC7 的运行证据。
+本文只保留目标、当前状态、接下来的阶段和固定约束。逐次验证细节、失败记录与旧版完整流水账见 [修改前完整归档](history/planning/PLAN-before-readability-cleanup.md) 及第 6 节的证据入口。
 
-优先复用已有模型调用、周边压缩、超分和帧生成实现，只开发必要的游戏适配；是否使用外部控制程序，与 GPU 处理是否跨进程分别决定。
+## 1. 目标与处理链
 
-## 阶段 0：项目整理
+目标：在普通屏幕下，为 AC7 实现原生 NR、SR 与 FG 适配，使用游戏真实数据，不以参考项目的功能列表选定方案。
 
-- [x] 建立独立子目录和 Git 仓库。
-- [x] 将相关需求、调查、选型记录与对照预设集中到本项目。
-- [x] 保留参考仓库和历史产物的原位置，修复引用。
-- [x] 明确尚未实现适配器，未选定后端，未确认实际运行 API。
-- [x] 检查迁移后的文件完整性和本地链接。
+已接受的候选处理链：
 
-本阶段只整理项目。游戏调查在本阶段完成后与用户一起进行。
+场景 HDR → SDR 代理 → NR → 恢复 HDR → SR(HDR) → 原 warp / 后处理 / tonemap → FG 最终颜色 / 引导 / UI 与呈现
 
-## 当前执行状态
+- 资源是否为 HDR 按插入位置的语义判断，不按显示器开关判断。
+- 完整接入方式未选定：仅比较薄AC7适配＋OptiScaler与自研接入＋直接NGX；现有ReShade只作为已验证的诊断采样工具，暂停专用回接。参考仓库未经实际验证，不计为已工作依赖。
+- 只做 NR/SR/FG 所需的窄适配。不逆向或修改模型、NGX core，不试探私有 ABI，不重写 UE4 渲染器或整套调色链。
+- 是否使用外部控制程序与 GPU 处理是否跨进程分别决定，不预设独立进程。
 
-**画质判断最新决策**：NR预期重建/补光/材质变化，不以非中性输出与原图不同判缺陷。11暗通道>10倍等仅为诊断定位，不凭此加限幅、削弱NR或阻塞后续。接入正确性按明确契约，质量靠具体可见异常/连续帧与用户偏好；SR稀疏高光平滑/FXAA梯度也不是质量评分。见[评估决策](docs/AC7-Image-Quality-Evaluation.md)。下一步继续真实序列/jitter/history窄方案，P1暂用、预曝光延后。
+## 2. 当前状态
 
-**最新：扭曲前新配对NR→HDR→SR实际求值/回接完成。** 465后新代理/源哈希与旧postwarp不同，模型实际各Evaluate1次、输入逐位/fence/debug0，旧结果未混用。GPU恢复/源全图逐位后SR写回，保留原466/467warp、曝光/后处理/UI，FXAA保留及RGB旁路均通过。中性15raw、SR恒等18raw逐位，SR比NR最终896,097像素变化/区外0，guides/扭曲场/3UI与原阶段逐位，错旧代理/源两次负向在对应写回前拒绝。NR20,478高光保护像素不变但11暗通道>10倍(max17.1)，SR细高光衰减未验收；不是画质评分。见[prewarp新模型链](docs/AC7-Prewarp-NR-SR-Validation.md)。下一步真实连续帧/帧身份/jitter/history/reset的窄方案，不能循环同帧冒充序列。P1暂用、预曝光延后，5成功重放+2拒绝、新模型2次、0游戏，无原capture/SDK/游戏改动/提交；实时桥/高输出/FG尚无。下方“尚未新跑模型”是旧边界阶段记录。
+**已完成**
 
-**最新：候选边界优先移到原warp前（465后/466前）。** 已读取prewarp颜色/扭曲场/深度与MV；460场景=465场景，原466/467改变88,621颜色像素而depth32/MV逐位不变，stencil变化227,425像素。最大texel位移长度31.09输入像素。新边界中性HDR往返15项raw全部逐位，原postwarp/final与旧捕获逐位。初次整块depth断言失败经分量核对保留stencil差异，未掩盖。见[prewarp验证](docs/AC7-Prewarp-Boundary-Validation.md)。下一步以新prewarp输入重新配对GPU代理/NR/HDR/SR，写回后保留原warp及FXAA RGB旁路对照；严禁直接复用旧postwarp模型结果。P1继续暂用，0新增模型求值/游戏启动，未改原捕获/SDK/游戏无提交。新边界只是同尺寸离线候选，透明/上游偏移/时域/低高输出另验。
+- 项目独立化与文件整理（阶段 0）。
+- 运行 API 确认为 D3D11；采样工具已取得真实动态两帧与八帧样本。
+- 独立离线工具 `gpu-chain` 跑通整链：真实动态八帧（698–705）经 GPU 代理 → NR → GPU 恢复 HDR → SR，56 个阶段的 raw 与原文件基线逐位一致；NR/SR 的 feature 持久、Reset 1→0、debug 为 0、清理正常。见 [GPU 数据链](docs/AC7-GPU-Chain-Validation.md)。
+- 同一工具完成 post-submit 等待预算验证：真实 NR 与 SR 各注入一次超时（预算 2 ms），迟到结果被丢弃，busy 帧保留原图，两特性 Reset 后恢复并继续历史，六份输出与独立参考逐位一致。见 [等待预算与退休](docs/AC7-Deadline-Retirement-Validation.md)。
+- 提取无日志/读回/等待循环的 `FrameSubmission`，支持绝对截止时间。相同四张源纹理复制后覆盖、连续复用，16 份 D3D12 输入仍逐位一致；在途过期、完成后才首次轮询和提交前已过期均按规则处理。整链与 Reset 回归通过。见 [帧提交与源覆盖](docs/AC7-Frame-Submission-Validation.md)。
+- `ChainSchedule` 已统一输入准备、NR、HDR 恢复与 SR 的绝对截止时间和双 Reset；输入前过期、NR后/SR前过期、SR在途过期和忙帧回退通过，六份恢复/继续历史输出与参考逐位。预算是独立诊断边界，不是目标帧时间。见 [整链调度策略](docs/AC7-Chain-Schedule-Validation.md)。
+- 固定尺寸 `NonblockingChain` 原型已按单次调用推进；NR/SR各16次受阻pending、停止拒新帧、D3D11和模型共同退休后销毁、三次驱动实例重建与双Reset通过。自有scene/exposure快照使调用后源覆盖仍能正确恢复HDR；六份输出与原始输入参考逐位。见 [单步驱动与退休](docs/AC7-Nonblocking-Chain-Validation.md)。
+- 调用方报告处理错误后，驱动保留首次原因、隐藏输出、拒绝新帧，健康的NR/SR在途工作可正常退休。三处错误注入、六份恢复参考及正常56阶段回归通过；不等于真实API或设备失效验收。见 [错误停用与退休](docs/AC7-Chain-Error-Stop-Validation.md)。
+- `FixedRuntime`统一持有转换资源、NR/SR与驱动，4次会话实际重建，32次受阻关闭保留资源、退休后释放；部分构造上下文不匹配能回收已创建特性，六份恢复/历史输出逐位。见 [固定会话所有权](docs/AC7-Fixed-Runtime-Ownership-Validation.md)。
 
-**最新：FXAA保留/旁路对照完成。** 默认路径13raw与前轮逐位；仅替换有效区RGB、保留alpha/区外契约后，上游和三张UI逐位一致，最终78,379像素改变、区外0。首轮全图copy因改变padding alpha被拒绝/修正，失败证据保留。UI前统计保留FXAA时尾翼梯度比例0.97629、海面0.93371，天空选区无变化；只有空间平滑证据，无动态抗锯齿或性能结论。后续SR实验优先FXAA RGB旁路候选、保留原组对照，不改游戏设置。下一步候选位置warp颜色/guide及真实连续帧/jitter/history/reset。P1暂用/预曝光继续延后，0新增模型求值、无游戏/原capture/SDK改动无提交。见[FXAA对照](docs/AC7-SR-Writeback-Validation.md)。下方旧“下一步FXAA对照”是前阶段记录。
+**尚未完成**
 
-**最新：SR同尺寸离线回接通过资源/区域/UI检查。** 用户确认菜单仅FXAA、无TAA选项；捕获Draw427辅助历史滤波不当作全场景TAA，526的post-tonemap空间AA本轮保留。派生重放467后NR恢复→整图逐位核验实际SR源→SR packed写回→原曝光/tonemap/FXAA/后处理/UI；恒等12项raw逐位，SR最终896,406像素改变、有效区外0，三张UI逐位，错源负向写回前拒绝。用既有NR/SR输出、0新增模型求值，P1继续暂用；见[同尺寸回接](docs/AC7-SR-Writeback-Validation.md)。下一步原FXAA保留/旁路对照，再解决候选位置warp颜色/guide及真实连续帧，未选最终hook/桥/宿主，非实时或高输出/时域验收。下方“未SR回接”是此前诊断阶段记录，当前指未实时接入。
+- 任何游戏内接入：未写游戏 scene，未接原 warp / 后处理 / UI，未启用 NR、SR 或 FG。
+- 生产环境整帧预算与实时性能：独立工具已共用绝对截止时间，但仍有 CPU 轮询与测试开销；未包含游戏输入捕获、scene 写回和呈现，不代表 FPS、延迟或显存验收。
+- 资源生命周期：已有固定尺寸驱动stop/drain和重建验证；真正的尺寸/模型重建、NGX或设备会话重建、设备丢失与游戏安全卸载尚未实现。
+- 路线1/2均需完成游戏host/proxy身份核验与scene / warp / post回接；当前没有任何已选定的游戏模型宿主。
+- 质量验收：NR 暗部局部增益、SR 细高光、动态稳定性与遮挡尚未验收。
 
-**用户最新优先级：预曝光调查延后。** 基于已有P=1单Reset诊断未见明显整体异常，后续实验暂用P=1，保留未校准标记；不再以找出真实P阻塞插入位置、回接和连续帧验证。下一步转向真正SR输入/插入位置及原后处理/UI回接。海面小高光衰减仍未验收，不能归因P；若后续出现明显亮度/曝光跳变、闪烁或历史异常，再重开预曝光排查。本节下方追查P的后续建议仅为此前阶段记录，不是当前执行要求。
+**不能据此宣称**：实时可用、已接入游戏、整帧性能合格、画质通过、P 已校准、jitter 已验证。
 
-正式NR310.9.16.0已完成D3D12真实AC7单帧SDR Evaluate/GPU完成/读回：三张输入逐位一致、11,059,200个输出RGB通道全部有限、输出非恒等、D3D12 debug error为0。NR在本机D3D11特性不可用；D3D12 scratch PlatformError保留，创建和求值均不依赖其先成功。官方Remix明确NR工作在SDR空间，本轮采用无HUD post-tonemap真实场景及同帧规范化depth/MV，Reset=1，见 [单帧求值](docs/AC7-NR-Single-Frame-Evaluation.md)。
+## 3. 已确认事实与当前假设
 
-已完成真实HDR→CPU SDR代理→GPU NR→CPU HDR恢复参考验证：关闭NR的中性往返浮点零变化、原R11G11B10逐位一致；开启后全部输出HDR有限、最大166保留、20,566完全高光保护像素不变。官方公式的epsilon暗部限制已复现，本项目改为转移NR相对实际FP16代理的改变量。7个暗部通道增亮>10倍仍待画质验收，见 [HDR参考验证](docs/AC7-HDR-NR-Roundtrip.md)。
+- 离线验证使用 NR 与 SR 的 310.9.16.0 正式 runtime。本机 NR 的 D3D11 特性不可用，因此离线链经 D3D11 共享纹理交给 D3D12 NGX 执行，再回到 D3D11。
+- 当前模型候选边界是原颜色 warp 之前（465 后 / 466 前）。depth32 与 MV 另行判断，原 warp 保留在模型之后。旧的 466/467 后模型结果只作历史证据，不能套用于新输入。
+- 曝光 P 为 **P=1，未校准**。已有诊断未见明显整体异常，预曝光调查延后且不阻塞；若出现明显亮度跳变、闪烁或历史异常，再重开排查。
+- 实际 jitter 为 0，不伪造非零 jitter。
+- 游戏画质菜单只有 FXAA，没有 TAA。捕获中的辅助历史 / 速度滤波不能称为全场景 TAA。
+- 当前动态样本的纹理分配为 5120×1440，有效场景是中央 2560×1440；尚不代表最终全幅超宽输入。
 
-当前合同核查已完成：NR310.9.16.0直接输入真实HDR时，即使修改强度全零，输出RGB也严格等于clamp(input,0,1)；官方路径明确SDR、公开专用接口无HDR切换参数。因此关闭原生HDR直入分支，模型输入必须是SDR兼容代理，原HDR可保留在外部链中。
+## 4. 接下来的阶段
 
-用户接受的候选顺序已固定为：场景HDR→SDR代理→NR(SDR)→恢复HDR→SR(HDR)→原后处理/最终tonemap→FG最终数据与呈现。资源是否HDR按插入位置语义判断，不按显示器开关；不把NR临时代理交给FG。
+按以下顺序推进；已有资源定位、动态采样和模型执行证据直接复用，不重新要求用户采样。独立调度验证先行，宿主选型在游戏接入前完成。
 
-后续继续授权的局部GPU验证已推进至实际NR回写：D3D11 GPU代理真正送入正式D3D12 NR，重放现场再逐位验证同一代理后GPU恢复/写回HDR，修改经原后处理/UI进入最终帧。中性9项raw逐位一致，NR模式三张UI合成输入逐位一致，HDR166及20,566完全保护高光不变。故意配错CPU代理的负向测试在写回前拒绝，见 [GPU代理NR回接](docs/AC7-NR-GPU-Writeback-Validation.md)。
+### 阶段 1：OptiScaler接口验证与两路线比较（当前下一步）
 
-原曝光测量响应了NR修改，但目标2.470→2.450均被实际[0.5,1]限幅到1，当前增益不变，复算误差8.60e-8；不是动态曝光/闭环时序验收。GPU阶段通过离线文件/CPU staging衔接，不是实时资源桥或同进程连续链。
+工作：
 
-正式SR310.9.16.0已从能力/创建推进到两组显式独立输入域下的2560×1440 HDR/DLAA Reset诊断：原始HDR和NR后HDR均Evaluate/GPU完成/四输入读回成功、debug0、全部RGB有限且>1范围保留。PreExposure=1/ExposureScale=1明确标为诊断假设，未证明游戏实际因子；峰值166→102.8125、较大局部变化尚未验收画质，未SR回写、未多帧或超分。见 [SR Reset诊断](docs/AC7-SR-Reset-Diagnostic.md)。
+- 核实OptiScaler版本、导出、现成产物、构建依赖与全局配置；先在非AC7独立宿主验证SR的初始化、特性创建/执行、明确输入输出及销毁。
+- 检查真实执行阶段和输出，不能以Success代表求值；再核Pre-SR NR的SDR/HDR合同与周边颜色/guide布局，避免静默旁路。
+- 与本项目直接NGX的合格输入对照，比较所需窄改动、复制/同步点和生命周期；研究NR→HDR恢复→SR留在同一D3D12链的可能，避免叠加互操作桥。
+- 路线1是薄AC7适配＋OptiScaler，路线2是自研接入＋直接NGX先做NR/SR、FG另选。路线3完整自研FG暂缓；ReShade专用中性原型暂停，诊断采样成果保留。
 
-此前“所有SR Evaluate暂缓”已收窄为“原生输入标定/接入验收暂缓”，允许有显式假设的单帧API/格式诊断。只读scout扩展生产链到156writer/33唯一PS统计及末两级，仍无pre-exposure语义证明。
+完成标准：取得可复核的接口执行/输出证据，或列出准确的接口/构建阻塞；比较两路线工作量、同步成本与FG复用边界后再选型。当前未有框架性能对比，不承诺哪条更快。
 
-最新[SR空间响应分析](docs/AC7-SR-Spatial-Response.md)：两组已有raw约90%绝对差异来自0.47%海面稀疏高光像素，最强点17×17数值和约仅保留44%，不宣称邻域守恒。同参数仅新增一次合成Reset控制：平坦166输出162.75、单像素160输出3.83、65×65亮块中心159.625，全图输出最大185.125；不支持固定HDR上限103，支持空间结构相关响应。公开helper核对没有已证明的必需缺项，未填虚构帧时间/猜曝光。真实pre-exposure和时域/高光画质仍未验收；下一门槛为实际view/曝光语义及有明确导出方案的真实相邻帧。现在不让用户盲目F11重抓，不重复单帧当历史。用户不深改工具链限制保持，FG/高输出/性能未验收，未部署或提交。
+### 阶段 2：选定路线的最小游戏回接
 
-最新[View布局核对](docs/AC7-View-Exposure-Layout.md)：公开UE4.18 GameWorks参考的旧ExposureScale局部序列与AC7实际row125–133多字段相符，row129.y=1.333333为旧字段候选；参考填充代码明确“Only used for MobileHDR == false”，不能当P。UE4.22新增PreExposure/倒数及其他字段，直接套偏移不成立。32个实际View绑定PS/槽位字面row129扫描无访问，有覆盖限制，不证明全路径不存在P。下一步优先核实旧桌面HDR生产路径是否未预曝光，而非预设存在新版字段；仍不猜P=1，不盲目采样，不深改工具链。本轮0GPU/NGX/游戏调用、无部署/提交。
+工作：
 
-曝光两端后续：Scene210→469/471采样/平均→473对数亮度→475/477/479/481平均→482适应→525乘曝光的资源链/CB及CPU预测对上，误差8.60e-8。旧/新曝光纹理全draw已声明PS/VS关联四处（427时域辅助混合权重、482适应、484阈值、525tonemap），不混淆为场景预曝光。六个生产PS准确末端已由主会话检查/脚本断言；child初稿有混淆，已挑战修订且保留残余措辞错误，结论按原shader不直接采信。完整上游尺度未证明，倒数测光可吸收固定P，“无显式除P”不能证明P1。下一步追具体保留颜色项/光照向量/VS插值尺度来源（Draw33 View138.x实际0，已排除其本帧贡献），再评估是否需受控曝光观测，禁止无界阴性扫描；0GPU/NGX/游戏、无参数/配置变更无提交。
+- 依据阶段1结果确定宿主，复用已取得的真实scene/depth/MV/View与shader签名，不重新要求用户采样。
+- 固定当前尺寸，先实现默认关闭的中性回接、全状态恢复、区域外保持、错误保原图与安全停止；独立合成D3D11宿主验证后再准备用户操作的游戏包。
+- 不用捕获draw编号作实时hook；模型阶段必须解决同帧曝光取得和原warp消费前完成时序，不写回迟到结果。动态resize不作为首次固定尺寸中性测试前置。
 
-文档维护：当前状态集中在本节、README和API核对；Nsight启动/首帧Live Analysis旧调查已移入history/nsight-startup，RenderDoc实验在history/renderdoc。历史文件用于追溯，不再作为当前执行步骤。
+完成标准：中性旁路、状态、区域、错误和关闭控制通过；准备可审阅包与操作说明。未经用户部署/实际游戏验证，不宣称已接入。
 
-## 阶段 1：共同调查游戏运行事实
+### 阶段 3：游戏内同尺寸 NR → HDR → SR 回接
 
-本阶段已取得D3D11设备/交换链、两份可独立重放的C++ Capture、正常飞行scene/HUD分离与打包速度/矩阵相机回退证据。D3D11输入模块GPU数值与状态恢复通过，同尺寸旁路后最终图逐位一致；曝光应用通道已读回复算。详见 [正常帧](docs/AC7-Nsight-Normal-Flight-20261028.md)、[代码验证](docs/AC7-D3D11-Guide-Bypass-Validation.md)、[颜色曝光](docs/AC7-Color-Exposure-Backend-Gates.md)。最新正常样本未开超宽屏补丁，有效场景中央2560×1440，不能当最终全幅条件。另用户报告后续Nsight抓帧卡30%；只读检查发现14:01 Nsight UI AppHang及UE4SS同偏移间歇崩溃，但尚不能将其与进度阶段对应，见 [30%挂起调查](docs/AC7-Nsight-30-Percent-Investigation.md)。用户截图已确认多帧：当前Frame Debugger捕获约6,753,807事件、Frame3062–4424；基线单Frame10245约15,085事件。工作集高约16.9GB，长采集导致耗时是强假设；但当前项目Frame Debugger仍为Manual且没有frame-count字段，设置变化原因未知。先保全当前结果，不Resume/Next Frame/导出巨大捕获。之前CLI启动的probe实际卡住（PID39680，现已退出），不能算捕获成功。用户关闭该运行后独立启动probe，Nsight截图目标PID26464仅单Frame #108、5个事件；因此Nsight不会对所有D3D11目标无条件多帧，AC7会话/捕获路径仍是差异候选。用户确认probe截图也是F11手动捕获；故同一F11在probe上单Frame而AC7上约1363 Frame，目标应用/会话交互而非hotkey普遍设置差异成为强嫌疑。F11为触发请求，Nsight在目标进程观察D3D11/Present并据此采集；应用可影响观察时序和帧边界，但无证据它可直接设置frame-count。1363 Frame候选为一次采集边界或host-target状态异常，不是高帧率本身。根因未定位；若继续，先结束当前会话安全保全，再用fresh Nsight UI对AC7同配置只F11一次。未再执行CLI或操作当前UI。公开检索找到NVIDIA论坛UE5/Vulkan PathTracing捕获卡55%且版主复现并开内部case的相似但非同类报告；未找到AC7/D3D11/多帧事件的精确匹配或公开修复。详见 [30%挂起调查](docs/AC7-Nsight-30-Percent-Investigation.md)。
+工作：
 
-- [ ] 记录实际游戏版本、启动参数、显示模式、现有加载器和相关 mod。
-- [x] 确认真实使用的图形 API、设备、适配器和交换链描述。
-- [ ] 选定可重复的飞行片段，记录当前画质、渲染比例和显示分辨率。
-- [x] 确定采样工具与最小观测方式，保留回退路径。
-- [ ] 定位原 TAA、空间放大、色调映射、后处理和 UI 绘制阶段。
-- [ ] 取得颜色、深度、运动矢量、jitter、曝光与视图常量的样本及绑定证据。
-- [ ] 确认资源有效区域、帧对应、生命周期及历史重置。
-- [ ] 标明高分辨率 SR 结果可回接的位置，以及无 HUD/UI 数据来源。
+- 先做中性与失败回退控制，再逐项接入已验证的 NR、HDR 恢复及同尺寸 SR 路径。
+- 将结果写回原场景，让原 warp、后处理、tonemap 与 UI 按原顺序继续。
+- 检查连续帧身份、真实 jitter、历史、双 Reset 和超时回退；默认保留 FXAA，并与仅旁路其 RGB 的候选对照，保留 alpha、黑边和 UI。
 
-现有帧捕获已确认运行API为D3D11；既有源码检查、CPU/GPU映射一致或requirements通过都不等于原生时序输入和目标模型求值已验收。
+完成标准：游戏内中性回接与原图一致；模型开关、输入错配、超时与历史中断均可复现，失败不写入错误结果。画质依据具体可见异常和连续帧对照评估，不以非中性差异本身判缺陷。
 
-阶段产物应包括采样条件、可重现步骤、证据索引及“已确认/未知/不适用”清单；不能用零值或配置默认值填补未知项后宣布通过。
+### 阶段 4：真正超分与超宽周边压缩
 
-## 阶段 2：以游戏证据完成选型
+工作：
 
-- [ ] 按真实 API、资源格式、后处理回接和呈现条件，逐项比对候选后端。
-- [ ] 区分现有 API 可直接使用、需要窄接口扩展、需要侵入修改的部分。
-- [ ] 比较同进程及跨进程处理的资源共享、等待、失败恢复和维护范围。
-- [ ] 核对 Pre-SR 周边 NR 的数据变换与历史实现。
-- [ ] 核对 FG 的相机、时间、无 HUD/UI 及交换链前提。
-- [ ] 记录选择、淘汰理由和仍待验证的条件。
+- 在同尺寸接入稳定后验证不同输入 / 输出尺寸的 SR，处理颜色、引导数据与真实渲染 jitter 的对应关系。
+- 验证超宽屏中心保护、横向周边压缩、平滑过渡与正确解包，保留中心与边缘对照。
+- 检查细高光、遮挡、透明物与历史稳定性；出现明确曝光异常时再重开 P 的调查。
 
-候选资料见 [架构调查](docs/AC7-Native-DLSS-Architecture-Selection.md)。本阶段完成前，不将任何候选标为最佳或默认宿主。
+完成标准：尺寸、坐标与历史对应正确；HDR 结果仍在原 warp / 后处理 / tonemap 之前回接，UI 与黑边保持；超分和周边压缩各有连续帧质量与开销记录。
 
-## 阶段 3：验证最小适配接口
+### 阶段 5：FG 与整链验收
 
-仅在阶段 1、2 有足够证据后开展：
+工作：
 
-- [ ] 定义实际所需输入/输出、帧身份、所有权及同步契约。
-- [ ] 验证后端调用和真实失败行为，不只检查成功返回码。
-- [ ] 先同尺寸旁路/重建，验证图形状态、历史与游戏回接。
-- [ ] 实现低分辨率输入、高分辨率输出，替换原 TAA/放大并保留清晰 UI。
-- [ ] 验证加载、暂停、相机切换、任务重启、分辨率变化和退出。
+- FG目标保留，优先复用合适后端；完整自研FG/交换链基础设施（路线3）暂不考虑。
+- 测量整链真实帧率、输出帧率、GPU 帧时间、显存与延迟。
+- 检查飞机、导弹、云层、遮挡、海面高光与 HUD，并验证失败回退。
 
-“适配接口”不自动等于外部 IPC，也不等于必须把某个完整框架装入游戏；形式由选型决定。
+完成标准：整链性能与动态画质均有实测记录；未通过项列出具体原因与回退方式。
 
-## 阶段 4：逐项接入目标链
+## 5. 固定约束与暂缓事项
 
-- [ ] 整幅单次 Pre-SR NR，验证颜色空间、曝光、引导数据和历史。
-- [ ] 超宽屏 NR 中心保护、横向周边减负、平滑过渡及正确解包。
-- [ ] 先 2× FG，验证无 HUD/UI、帧身份和呈现节奏。
-- [ ] 测量整条链的真实帧率、输出帧率、GPU 帧时间、显存和延迟。
-- [ ] 检查飞机/导弹/云层/遮挡/HUD 的动态画质及失败回退。
+- **游戏与配置**：当前不运行游戏、不改游戏或 NVIDIA 配置、不部署、不替换插件，也不要求用户补采，除非另行决定。
+- **AC7 派生重放**：未隔离配置前禁止运行任何 AC7 派生离线重放，即使 NVIDIA 自动优化现已关闭也不能解除。不得只靠改 exe 名宣称隔离成功，不自动修改 NVIDIA 全局偏好，也不锁定用户 INI。依据见 [事件报告](docs/AC7-Eight-Frame-Display-Reset-Incident.md)。
+- **测试专用代码**：standalone ExitProcess 保护、CPU 轮询、fixture 读回与文件比较只用于测试，不得进入游戏代码。
+- **Nsight / Next Frame**：多帧捕获卡顿的原因未定位，暂停盲目重试；不作为当前路径。
+- **画质评价**：NR 的重建、补光与材质改变属预期，非中性输出不要求与原图一致。暗部倍率与改动像素数只作定位线索，不单凭数值判缺陷、限幅、削弱 NR 或阻塞推进。画质缺陷须具体到可见异常或连续帧对照，并参考用户观感。依据 [评估决策](docs/AC7-Image-Quality-Evaluation.md)。
+- **曝光与 jitter**：P=1 未校准但不阻塞，预曝光调查延后。jitter 实际记为 0；需要非零值时，必须由游戏实际渲染应用。
+- **抗锯齿**：FXAA 是游戏内唯一选项；不把辅助滤波称为 TAA。
+- **工程边界**：只做窄接口适配。若路线需要深入修改工具链或侵入引擎，超出范围即停止该路线并重新评估。
+- **提交**：用户授权本轮在记录路线决策后创建一次本地提交，再进行接口验证；不push，后续验证改动不自动再次提交。
+- **时间**：本计划不含时间估计；文档整理不等于已取得运行采样。
 
-## 工作记录规则
+## 6. 证据入口
 
-- 本项目相关的新文档、适配器代码与验证工具放在此目录。
-- 参考源码、已运行测试和 AC7 实测分开记录，明确不能据此推断的内容。
-- 每个可执行阶段完成后更新结果和未决项，不因某个模块编译成功跳过前置调查。
-- 未确认的数据会阻止该阶段验收，但不阻止继续整理证据或排查。
+下列为各主题的代表性报告，完整历史见归档。
+
+- 当前决策：[路线1/2比较与验证顺序](docs/AC7-Integration-Route-Decision.md)。
+- 当前最新：[固定会话所有权](docs/AC7-Fixed-Runtime-Ownership-Validation.md)、[最小游戏测试路径](docs/AC7-Minimal-Game-Test-Path.md)、[错误停用与退休](docs/AC7-Chain-Error-Stop-Validation.md)、[单步驱动与退休](docs/AC7-Nonblocking-Chain-Validation.md)、[整链调度策略](docs/AC7-Chain-Schedule-Validation.md)、[帧提交与源覆盖](docs/AC7-Frame-Submission-Validation.md)、[GPU 数据链](docs/AC7-GPU-Chain-Validation.md)、[等待预算与退休](docs/AC7-Deadline-Retirement-Validation.md)
+- 共享桥与模型：[共享传输](docs/AC7-Shared-Bridge-Validation.md)、[共享模型](docs/AC7-Shared-Model-Validation.md)
+- 实机动态样本：[动态八帧](docs/AC7-Dynamic-Eight-Frame-Validation.md)、[实机样本离线 NR/SR 八帧](docs/AC7-Live-Eight-NR-SR-Validation.md)、[动态两帧](docs/AC7-Dynamic-Live-Pair-Validation.md)、[首次两帧](docs/AC7-First-Live-Pair-Validation.md)
+- 历史与时域：[SR 历史](docs/AC7-SR-Live-Pair-History-Validation.md)、[两帧 NR/SR](docs/AC7-Live-Pair-NR-SR-Validation.md)、[连续帧方案](docs/AC7-Temporal-Capture-Plan.md)
+- 采样工具：[有界采样](docs/AC7-Bounded-Sampler-Validation.md)、[八帧采样](docs/AC7-Eight-Frame-Sampler-Validation.md)、[八帧显示 Reset 事件](docs/AC7-Eight-Frame-Display-Reset-Incident.md)
+- 离线模型链：[prewarp 边界](docs/AC7-Prewarp-Boundary-Validation.md)、[prewarp NR/SR](docs/AC7-Prewarp-NR-SR-Validation.md)、[SR 回接与 FXAA](docs/AC7-SR-Writeback-Validation.md)、[NR GPU 回接](docs/AC7-NR-GPU-Writeback-Validation.md)、[HDR 往返](docs/AC7-HDR-NR-Roundtrip.md)、[SR 诊断](docs/AC7-SR-Reset-Diagnostic.md)、[SR 空间响应](docs/AC7-SR-Spatial-Response.md)
+- 游戏事实与曝光：[View 布局](docs/AC7-View-Exposure-Layout.md)、[颜色与曝光门](docs/AC7-Color-Exposure-Backend-Gates.md)、[图形 API](docs/AC7-Graphics-API-Support.md)
+- 质量：[图像质量评估](docs/AC7-Image-Quality-Evaluation.md)
+- 调查历史：[Nsight 30% 挂起](docs/AC7-Nsight-30-Percent-Investigation.md)、[history/nsight-startup](history/nsight-startup)、[history/renderdoc](history/renderdoc)
+- 项目约定：[README](README.md)、[AGENTS](AGENTS.md)
+
+完整旧版计划：[history/planning/PLAN-before-readability-cleanup.md](history/planning/PLAN-before-readability-cleanup.md)（修改前字节保全）。

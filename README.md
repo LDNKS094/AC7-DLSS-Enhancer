@@ -6,6 +6,14 @@
 
 ## 当前状态
 
+**当前路线决策**：信息仍不足以选型，只保留路线1“薄AC7适配＋OptiScaler”和路线2“自研接入＋直接NGX”；完整自研FG的路线3暂不考虑。暂停ReShade专用回接，现有采样插件仅保留诊断用途。本轮记录并提交当前成果后，优先做OptiScaler独立接口与真实输出验证，再决定路线。见[路线决策](docs/AC7-Integration-Route-Decision.md)与[工作计划](PLAN.md)。下方旧ReShade实施建议为历史。
+
+最新：[固定会话所有权](docs/AC7-Fixed-Runtime-Ownership-Validation.md)已通过4次实际模型/pass重建与安全关闭、部分初始化拒绝、六份恢复参考和正常56阶段回归。下一步按[最小游戏测试路径](docs/AC7-Minimal-Game-Test-Path.md)，用已有ReShade公开回调构建默认关闭、固定尺寸、不加载NGX的中性回接。动态resize不再作为首次中性测试前置；同帧曝光与模型完成时序仍需后续解决，当前未部署或测试游戏。以下为前阶段记录。
+
+最新补充：[处理错误后的停用与退休](docs/AC7-Chain-Error-Stop-Validation.md)已通过NR在途、空闲、SR在途三处调用方错误注入；第一原因保持、停止接收、输出隐藏及健康GPU退休通过，正常56阶段回归保持一致。绝对提交入口已移除直接ExitProcess，部分提交/API失效分支和统一会话所有权仍待验证。以下单步驱动成果继续有效。
+
+最新进展：[单步整链驱动与退休](docs/AC7-Nonblocking-Chain-Validation.md)通过固定尺寸独立验证：一次advance只推进/轮询一个阶段，源快照支持延迟HDR恢复；NR/SR各16次受阻pending、停止拒新帧、D3D11与模型共同退休、三次驱动重建双Reset与六份参考输出逐位通过。正常56阶段回归不变。下一步整理资源所有权/错误停用并验证实际尺寸和设备会话重建；当前只验证错尺寸拒绝，未接游戏或验收性能。此前[整链调度策略](docs/AC7-Chain-Schedule-Validation.md)与[源覆盖](docs/AC7-Frame-Submission-Validation.md)证据继续有效。下方早期状态按历史理解，当前无需补采。
+
 - 已通过 Nsight Graphics 2025.5 捕获AC7并确认D3D11；任务失败和正常飞行两份C++ Capture均已重放且最终图像核对通过，尚无游戏适配器。
 - 已新增D3D11输入规范化模块，并通过硬件GPU测试和AC7独立重放插入验证：深度逐位一致、速度对CPU参考最大NDC误差约1.37e-7，同尺寸旁路后的场景/HUD/最终图像均与基线逐位相同。尚无实时游戏hook或NR/SR/FG接入。
 - 正常样本未开超宽屏补丁，有效场景中央2560×1440。相邻帧、jitter、颜色曝光、低输入高输出及最终全幅适配仍待验证。**后端与实现路径未选定**。
@@ -17,6 +25,25 @@
 
 | 文档 | 用途 |
 | --- | --- |
+| [接入路线决策](docs/AC7-Integration-Route-Decision.md) | 路线1/2候选、路线3暂缓；OptiScaler独立接口验证优先 |
+| [固定会话所有权](docs/AC7-Fixed-Runtime-Ownership-Validation.md) | 实际模型/pass重建、安全关闭与部分构造拒绝验证 |
+| [最小游戏测试路径](docs/AC7-Minimal-Game-Test-Path.md) | 默认关闭的ReShade中性回接先行；模型同帧时序后接 |
+| [错误停用与退休](docs/AC7-Chain-Error-Stop-Validation.md) | 三处调用方处理错误注入通过；真实API/设备失效及统一所有权待验 |
+| [单步驱动与退休](docs/AC7-Nonblocking-Chain-Validation.md) | 固定尺寸逐次推进、源场景快照、停止与双API退休；实际resize/device-loss待做 |
+| [整链调度策略](docs/AC7-Chain-Schedule-Validation.md) | 单个绝对deadline贯穿两模型与转换，丢帧/双Reset验证；仍是独立诊断驱动 |
+| [帧提交与源覆盖](docs/AC7-Frame-Submission-Validation.md) | 单次轮询接口、16份覆盖前快照逐位、绝对截止时间；整帧调度待完成 |
+| [等待预算与迟到退休](docs/AC7-Deadline-Retirement-Validation.md) | 真实NR/SR超时原图回退、同token迟到丢弃、双Reset恢复逐位；仅提交后预算，非整帧实时 |
+| [完整GPU NR→HDR→SR链](docs/AC7-GPU-Chain-Validation.md) | 同进程真实八帧、56阶段逐位；中间无CPU/文件图像反馈，尚无游戏回接/实时预算验收 |
+| [真实模型共享纹理验证](docs/AC7-Shared-Model-Validation.md) | NR/SR各自真实八帧共享求值并回11，24返回与文件基线逐位；完整无文件模型链待接 |
+| [共享资源桥与定点验证](docs/AC7-Shared-Bridge-Validation.md) | 真实八帧共享GPU往返/过期回退逐位；太阳运动对应实测；新桥尚未接模型/游戏 |
+| [真实八帧NR→HDR→SR链](docs/AC7-Live-Eight-NR-SR-Validation.md) | 698→705动态输入，NR8/SR16持久feature/历史与Reset对照、输入逐位/debug0；仍非游戏内实时处理 |
+| [固定8帧采样验证](docs/AC7-Eight-Frame-Sampler-Validation.md) | v4两槽/256MiB逻辑内存/1GiB磁盘，8帧硬件与重放通过；可进行一次真实飞行补采样 |
+| [真实两帧NR→HDR→SR链](docs/AC7-Live-Pair-NR-SR-Validation.md) | GPU代理/guide→NR1/0→GPU恢复HDR→SR1/0离线通过；仍无实时桥，下一步有界8–16帧 |
+| [真实两帧SR历史执行](docs/AC7-SR-Live-Pair-History-Validation.md) | 同feature/纹理Reset1→0实测，与1→1对照首帧逐位同、次帧历史敏感；P1/jitter0，非画质验收 |
+| [动态真实两帧验证](docs/AC7-Dynamic-Live-Pair-Validation.md) | 1123→1124，game/real推进与六矩阵链通过；相机回退运动非零，后续利用现有样本 |
+| [首次真实两帧验证](docs/AC7-First-Live-Pair-Validation.md) | v3实机传输成功，393→394、real与矩阵链对应；模拟时间保持，动态验收未通过 |
+| [有界两帧采样验证](docs/AC7-Bounded-Sampler-Validation.md) | 固定2帧核心硬件检查、独立ReShade插件重放传输/原15项逐位；诊断包未部署 |
+| [真实连续帧采样方案](docs/AC7-Temporal-Capture-Plan.md) | Next Frame实测crash，暂停双捕获；已有长捕获证明跨帧采入，待解决帧数/停止控制 |
 | [画质评估决策](docs/AC7-Image-Quality-Evaluation.md) | 区分接入错误、NR预期变化与可见缺陷；数值差异不当质量分数或单独阻塞 |
 | [工作计划](PLAN.md) | 当前阶段、下一步调查及选型门槛 |
 | [首帧历史归档](history/nsight-startup/README.md) | 已结束的工具选择、启动资格及首次Live Analysis调查 |
@@ -82,6 +109,38 @@ D3D11处理模块可独立构建；目前测试限定为已保存捕获与合成
 这些目录不属于本项目 Git 仓库。将来需要复用具体代码时，再记录版本、许可、引入范围及构建方式。
 
 ## 下一步
+
+**等待预算与历史恢复已在独立整链通过**：真实NR/SR分别注入2ms post-submit超时，4份原图回退逐位、2迟到结果同token也不回写，busy不复用资源，完成fence才释放四输入；两次双Reset恢复及一次继续history与独立参考共6输出逐位。无故障8帧56stage保持原基线，debug0/cleanup，实际本轮NR26/SR24含参考与复验。见[验证报告](docs/AC7-Deadline-Retirement-Validation.md)。这还不是整帧预算或非阻塞游戏runtime：固定测试调度保留诊断/退休等待，fixture不模拟引擎纹理内容复用。下一步抽离无诊断读回/文件的调度入口，整帧deadline及session/resize/device-loss/安全卸载，再游戏host和原scene/post回接。无需补采或换插件；本轮无游戏/AC7重放/配置写/部署/提交。下方旧下一步为历史。
+
+**同进程完整GPU数据链已通过：** native fixtures→GPU guide/代理→共享NR→GPU恢复HDR与格式转换→共享SR→D3D11返回，真实698–705共56阶段raw全部逐位匹配原文件链，两特性/共享纹理持续、Reset/time/debug0/cleanup通过，中间图像不经CPU/文件反馈。仍有诊断validity/stage读回、参考比对、保存和CPU轮询，不是无CPU同步/性能验收。见[完整GPU链验证](docs/AC7-GPU-Chain-Validation.md)。GPU motion局部补明确half-even位编码（含±0/subnormal），40分量独立GPU自检及8帧全部motion逐位，失败两轮在Eval前拒绝并保留；公共模型参数提取后legacy NR2/SR2与shared SR reset8回归逐位。本轮总NR26/SR34，最终链NR8/SR8，无模型/SDK改造。下一步去诊断开销、deadline/drop-reset与同帧回退，再host/proxy身份/原scene和后处理接回；不需补采/部署，主会话未启动AC7/重放或写配置；同期真实游戏退出更新INI时间戳，但1150字节与保全副本逐位一致，未发现自动优化覆盖。以下旧“未接整链”为历史。
+
+**真实NR/SR分别接共享桥已通过，24份最终输出与原文件链整个raw逐位一致。** 沿用原模型参数/feature，增加固定8共享模式5/6：D3D11fixture→共享输入→D3D12模型→COMMON→D3D11返回，每组feature/resource identity固定，NR24/SR每支32输入读回、24返回、两APIdebug0与清理/有限值通过。首轮后收紧录制成功才upload/submit与明确published判断，最终完整复验仍一致；本轮实际总NR16/SR32（最终集NR8/SR16）。见[共享模型验证](docs/AC7-Shared-Model-Validation.md)。**尚未把NR共享返回→GPU恢复HDR→SR共享输入连成无文件链**，两特性仍独立fixture；下一步独立GPU整链核原基线，不部署、不需补采。未验实时预算/模型drop-reset/device失效/游戏host和原后处理回接。本轮无AC7/重放/配置改动，以下旧状态为历史。
+
+**共享资源桥独立原型已通过：** D3D11创建NT共享→D3D12打开，公开shared fence交替访问；真实8帧32输入/8输出逐位、固定5资源、两边debug0，刻意阻塞12队列时pending不发布，晚到结果discard保原图，busy/重复/缺输入/错格式/异adapter拒绝，D3D11绑定保留。先前12创建→11打开的本描述符组合E_INVALIDARG已保留，未做私有绕过。另用太阳实际质心独立验向后motion，7段误差.013–.085px、反向对照24–153px，所设高光/旧足迹阈值下候选0；飞机/海面细节图已查看，不等于全场景零拖影/质量验收。见[共享桥与定点验证](docs/AC7-Shared-Bridge-Validation.md)。**新桥尚无模型调用**，既有八帧NR/SR仍文件链；下一步让真实NR/SR使用共享纹理并验证回11，再考虑宿主/原后处理回接。无需补采/换插件，本轮无模型/AC7重放/配置改动。以下旧状态为历史。
+
+**真实八帧与完整离线NR→HDR→SR历史链已通过执行资格，无需再次补采。** 58000-130125640计数698→705，7段game/real及6×7矩阵链精确，场景/depth/velocity实际变化，allocation恢复5120×1440；NVIDIA自动优化已由用户关闭且只读确认0，本轮未启动AC7/派生重放。GPU8帧代理/guide/中性恢复通过→同feature NR8次→配对GPU恢复→SR history8及逐帧Reset对照8，共NR8/SR16，所有输入读回/fence/debug0/有限值通过、首帧两支逐位。大位移FP16边界经原公式复算后改为半量化bin+.001px的float检查，错误/失败证据保留，原数据/模型值不改。原生高光本来就达12288，恢复后逐帧保留，非新增异常推断。见[动态8帧](docs/AC7-Dynamic-Eight-Frame-Validation.md)、[8帧完整链](docs/AC7-Live-Eight-NR-SR-Validation.md)及[预览](artifacts/research/live-nr-sr-eight/comparison.png)。实际jitter0/P1暂用、约0.286s不代表完整时域画质；下一步核具体稳定性/遮挡与最窄实时资源桥/同步/回接/失败回退，尚不能开启游戏内模型。以下旧采样/失败建议为历史。
+
+**八帧首次实机失败与显示重置已查到直接原因：** NVIDIA App自动优化把新路径诊断重放当AC7，共享配置从无边框/100变全屏/200，真实纹理10240×2880/像素四倍，预算检查按设计拒绝。已保全日志/前后状态并停止所有未隔离AC7重放；不提高采样预算、不再换addon、不自动改NVIDIA全局偏好。当前退出保存值已100/无边框；下一次正常启动先确认比例100后再按旧八帧命令采样。见[事件报告](docs/AC7-Eight-Frame-Display-Reset-Incident.md)。此前“无游戏文件改动”仅指直接写入，不能涵盖已证实外部程序间接修改。
+
+**固定8帧采样升级已通过离线资格，可补一次真实飞行序列。** v4保持2槽而非囤8帧，逻辑在途≤256MiB/总磁盘≤1GiB、忙则失败不跳帧；达到8帧停止，旧两帧默认入口保留。合成40资源/断档/缺帧/写盘失败/磁盘预算与旧回归debug0通过；AC7重放8份40资源对应、原15raw逐位，逻辑峰112.5MiB、总量约900MiB，995重复正确标非连续。包`artifacts/packages/ac7-eight-frame-diagnostic-v4/`备齐未部署。现在需要用户退出后仅换addon并复制Request-Eight-Frames.cmd，飞行后运行命令立刻回游戏（延迟5秒），提供AC7-eight-frame目录；详见[采样验证/步骤](docs/AC7-Eight-Frame-Sampler-Validation.md)。这是资源补采样，尚非游戏内NR/SR，模型链/实时桥状态保持。
+
+**真实两帧GPU代理→NR→HDR恢复→连续SR离线链完成。** 两帧中性scene逐位、GPU depth逐位、guide invalid0；NR同feature/texture Reset1→0两次求值/6输入读回/debug0，重新核GPU proxy为实际NR输入后恢复HDR、区外0，再SR同feature Reset1→0及1→1对照4次求值/输入读回/debug0。SR首帧对照逐位、次帧2989365像素差仅诊断；预览无缩略全局异常，不验收动态画质。见[完整离线链](docs/AC7-Live-Pair-NR-SR-Validation.md)。只读Luna完成NR公共Reset/入口核对，父会话实现/GPU/验收。仍是文件staging非实时互操作；**尚不能游戏内开启NR/SR**。下一补测为8–16真实连续帧，先准备有界短序列工具（不能突破现有预算直接囤16帧），届时告知用户；现在不需重复两帧或操作游戏。P1/jitter0保持，2新NR/4新SR，无游戏改动/新提交。
+
+**真实动态两帧SR历史执行已通过。** 原始prewarp HDR/各自新guides输入，同NGX feature/texture连续Reset1→0，两帧Evaluate/GPU完成/四输入逐位/debug0，RGB全有限保HDR。1→1对照首帧逐位相同，次帧1849323像素不同，支持history设置影响输出，不当质量评分；旧单帧frame1与Reset对照逐位，缺输入/覆盖Init前拒绝。见[SR历史执行验证](docs/AC7-SR-Live-Pair-History-Validation.md)。此次隔离SR，未叠加NR，P1/jitter0仍显式；下一步用真实两帧GPU规范化/代理→NR→恢复HDR，再复用本次SR持久路径。无需用户重采当前两帧；8–16长期质量/真实jitter/实时回接后验。新增5次SR求值、0NR、0游戏，无提交。
+
+**动态两帧输入资格已通过。** 用户70932目录计数1123→1124、game/real约16.98ms推进且两条链残差0、6矩阵链逐位、相机矩阵改变；颜色1411575/depth-stencil1598651有效区像素变化、区外0。原objectMV纹理虽相同，实际depth/View相机回退约137万像素>0.1px、最大2.98px，不能只看raw object纹理判全局motion。jitter仍0，完整动态质量标志false保留。见[动态输入资格](docs/AC7-Dynamic-Live-Pair-Validation.md)。当前不再要求用户重复两帧；优先利用这份真实连续数据准备规范化/持久feature的Reset→保留history执行检查，再扩8–16帧；模型时域/长时质量未由采样资格自动通过。
+
+**首次真实两帧采样成功，但模拟时间保持。** 用户77324目录2×5资源完整，计数393→394、实时时间串接、6组当前/前帧矩阵逐位对应，支持相邻渲染区间；真实jitter0。两帧游戏时间相同、depth/MV相同，颜色有效区75,109像素变化，适合传输/静止历史证据，未验收动态时域。`candidateTimeChain=false`来自game链：旧UE4参考用CurrentWorldTime−DeltaWorldTime构造PrevGameTime，暂停时不能强制等于前一采样；原manifest保留。采样索引7→0并非393/394的mod8，旧单帧巧合假设已修正。详见[首次实机两帧](docs/AC7-First-Live-Pair-Validation.md)。下一次无需换DLL，只换`artifacts/packages/ac7-two-frame-flight-trigger/Request-Two-Frames.cmd`（等待5秒），进入飞行后启动命令立即回游戏，再核验动态两帧；当前未改游戏文件/运行模型。
+
+**第二次实机失败为辅助consumer重复，且采样早于新请求。** 日志显示启动约4.3秒即arm并失败，新遗留请求创建于约84秒后；支持启动时消费旧请求，不足以判断正常飞行采样结果。v3已加入进程创建时间请求门禁（旧请求归档不arm）及最多16个guide组合，按prewarp实际depth/View/viewport唯一配对，重复相同绑定去重，速度歧义仍拒绝；最多64个事件trace。硬件配对/歧义/请求门禁及原检查debug0，重放两帧/原15raw逐位通过。包`artifacts/packages/ac7-two-frame-diagnostic-v3/`备齐未部署；退出后只换addon、移走遗留`AC7-Capture.request`，进入飞行再发一次新请求。详见[采样记录](docs/AC7-Bounded-Sampler-Validation.md)。
+
+**首次实机采样未完成，v2已备好。** v1成功加载并响应请求，但在复制前因`Unsupported scene dimensions or View rect`拒绝，仅留下INCOMPLETE/failure；未取得真实帧。显示5120×1440不能证明内部纹理同尺寸，v1未记录实际数值。v2改用两帧256MiB总字节预算、保留rect/格式/设备检查，并在拒绝前写实际纹理/rect/预算metadata；新增padding与超预算硬件检查通过，重放原15raw不变。新包`artifacts/packages/ac7-two-frame-diagnostic-v2/`已准备，**未替换游戏内v1**；下一次退出游戏后只升级addon、保持显示设置，再采一次取得有鉴别力的数据。详见[采样记录](docs/AC7-Bounded-Sampler-Validation.md)。
+
+**受限采样工具已实现并通过离线资格检查。** 使用ReShade公开API20作独立诊断宿主，固定两帧/最多256MiB逻辑资源，保留原draw/矩阵/jitter，无NGX。合成硬件两组10资源有效数据准确、状态/拒绝/debug0；AC7捕获重放插件实际匹配三个shader，采入两组10资源后停止，原15raw逐位。两次重放计数995/995正确标非相邻，不当真实时域证据。早期加载大栈帧及代理device指针误判已修复，失败/对照日志保留。见[有界采样验证](docs/AC7-Bounded-Sampler-Validation.md)。诊断包`artifacts/packages/ac7-two-frame-diagnostic-v1/`已备齐二进制、许可、触发命令与回退说明，**尚未部署到游戏，也未取得真实连续帧**。只读游戏目录清单未见dxgi/ReShade冲突，实际部署前仍需复核。
+
+已创建首个本地提交`4a75c2d`，包含此前代码/验证材料与画质评估决策；原始捕获、模型/SDK、raw与构建均未入Git。提交后继续的[连续帧方案](docs/AC7-Temporal-Capture-Plan.md)和候选元数据脚本保持未提交，不自动再提交/推送。
+
+**用户确认Next Frame存在但会crash，双捕获操作已撤回。** 此前F11采入约1363帧/675万事件并卡住，足以证明实际存在跨帧采集行为；现在缺的是可控的帧数上限/停止与可用资源导出，不是再验证能否采多帧。先复查已有长捕获及公开D3D11控制入口，当前不要求用户截图、重试Next Frame/F11或导出巨大包。找到可靠边界后再采2帧资格/8–16帧短序列；若公开Nsight路径不足，再评估窄只读资源采样。官方Graphics Capture `--frame-count`仍只适用D3D12/Vulkan，不能套AC7。真实render jitter和历史/reset另验，已有计数995/mod8=3、时间步约8.3336ms仍只是单帧候选。
 
 **评估决策已明确：模型差异不等于缺陷。** NR预期改变光照/材质，暗部倍率与变化像素数只作定位，不因这些统计限幅或阻塞推进。接入错误用源身份/区域/UI/数值等契约判断；画质用具体可见异常、连续帧稳定性与用户观感判断。见[评估决策](docs/AC7-Image-Quality-Evaluation.md)。
 

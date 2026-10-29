@@ -13,7 +13,7 @@
 #include <stdexcept>
 #include <string>
 
-int evaluateCapturedFrame(ID3D12Device*,ID3D12CommandQueue*,NVSDK_NGX_Handle*,NVSDK_NGX_Parameter*,const std::filesystem::path&,const std::filesystem::path&,bool,bool);
+int evaluateCapturedFrame(ID3D12Device*,ID3D12CommandQueue*,NVSDK_NGX_Handle*,NVSDK_NGX_Parameter*,const std::filesystem::path&,const std::filesystem::path&,bool,bool,int);
 
 static bool validGuid(const std::wstring& value) {
     if(value.size()!=36) return false;
@@ -47,13 +47,32 @@ int wmain(int argc,wchar_t** argv) try {
         if(!validGuid(L"05882ed0-d4cd-4063-a726-0b4862bad3dc") || validGuid(L"------------------------------------") || validGuid(L"05882ed0Xd4cd-4063-a726-0b4862bad3dc") || validGuid(L"")) throw std::runtime_error("GUID validation self-test failed");
         std::cout<<"PASS GUID validation; no NGX calls"<<std::endl;return 0;
     }
-    const bool srDiagnostic=argc==6 && std::wstring(argv[1])==L"d3d12-sr-reset-diagnostic";
+    const bool nrPair=argc==6 && (std::wstring(argv[1])==L"d3d12-nr-pair-history" || std::wstring(argv[1])==L"d3d12-nr-eight-history" || std::wstring(argv[1])==L"d3d12-nr-eight-shared-history");
+    const int sequenceMode=argc==6 && (std::wstring(argv[1])==L"d3d12-nr-eight-shared-history" || std::wstring(argv[1])==L"d3d12-sr-eight-shared-history")?5:
+        argc==6 && std::wstring(argv[1])==L"d3d12-sr-eight-shared-reset-control"?6:
+        argc==6 && std::wstring(argv[1])==L"d3d12-nr-eight-history"?3:
+        argc==6 && std::wstring(argv[1])==L"d3d12-sr-eight-history"?3:
+        argc==6 && std::wstring(argv[1])==L"d3d12-sr-eight-reset-control"?4:
+        nrPair?1:argc==6 && std::wstring(argv[1])==L"d3d12-sr-pair-history"?1:
+        argc==6 && std::wstring(argv[1])==L"d3d12-sr-pair-reset-control"?2:0;
+    const bool srDiagnostic=(!nrPair && sequenceMode) || (argc==6 && std::wstring(argv[1])==L"d3d12-sr-reset-diagnostic");
     const bool sr=srDiagnostic || (argc==5 && (std::wstring(argv[1])==L"d3d11-sr" || std::wstring(argv[1])==L"d3d12-sr" || std::wstring(argv[1])==L"d3d12-sr-create"));
-    const bool evaluate=srDiagnostic || (argc==6 && (std::wstring(argv[1])==L"d3d12-evaluate" || std::wstring(argv[1])==L"d3d12-hdr-neutral"));
-    if((!evaluate && argc!=5) || (std::wstring(argv[1])!=L"d3d11" && std::wstring(argv[1])!=L"d3d12" && std::wstring(argv[1])!=L"d3d12-create" && !evaluate && !sr) || !validGuid(argv[4])) throw std::runtime_error("Usage: preflight-nr d3d11|d3d12|d3d12-create|d3d12-evaluate|d3d12-hdr-neutral|d3d11-sr|d3d12-sr|d3d12-sr-create|d3d12-sr-reset-diagnostic RUNTIME_DIRECTORY LOG_DIRECTORY OWN_GUID [PREPARED_FRAME_DIRECTORY]");
+    const bool evaluate=nrPair || srDiagnostic || (argc==6 && (std::wstring(argv[1])==L"d3d12-evaluate" || std::wstring(argv[1])==L"d3d12-hdr-neutral"));
+    if((!evaluate && argc!=5) || (std::wstring(argv[1])!=L"d3d11" && std::wstring(argv[1])!=L"d3d12" && std::wstring(argv[1])!=L"d3d12-create" && !evaluate && !sr) || !validGuid(argv[4])) throw std::runtime_error("Usage: preflight-nr d3d11|d3d12|d3d12-create|d3d12-evaluate|d3d12-hdr-neutral|d3d11-sr|d3d12-sr|d3d12-sr-create|d3d12-sr-reset-diagnostic|d3d12-sr-pair-history|d3d12-sr-pair-reset-control|d3d12-nr-pair-history|d3d12-nr-eight-history|d3d12-sr-eight-history|d3d12-sr-eight-reset-control|d3d12-nr-eight-shared-history|d3d12-sr-eight-shared-history|d3d12-sr-eight-shared-reset-control RUNTIME_DIRECTORY LOG_DIRECTORY OWN_GUID [PREPARED_FRAME_DIRECTORY]");
     const auto directory=std::filesystem::absolute(argv[2]),logs=std::filesystem::absolute(argv[3]);
     const wchar_t* runtimeName=sr?L"nvngx_dlss.dll":L"nvngx_dlssnr.dll";
     if(!std::filesystem::is_regular_file(directory/runtimeName)) throw std::runtime_error("Requested feature runtime absent");
+    if(sequenceMode) {
+        const unsigned frameCount=sequenceMode>=3?8:2;
+        for(unsigned f=0;f<frameCount;++f) {
+            const auto frame=L"frame"+std::to_wstring(f);
+            if(std::filesystem::exists(logs/frame)) throw std::runtime_error("Refusing prior sequence output before NGX initialization");
+            for(const wchar_t* name:{L"color.raw",L"depth.raw",L"motion.raw"})
+                if(!std::filesystem::is_regular_file(std::filesystem::path(argv[5])/frame/name)) throw std::runtime_error("Missing sequence input before NGX initialization");
+            if(srDiagnostic && sequenceMode>=3 && !std::filesystem::is_regular_file(std::filesystem::path(argv[5])/frame/L"frame-time.bin")) throw std::runtime_error("Missing captured frame time before NGX initialization");
+            if(srDiagnostic && !std::filesystem::is_regular_file(std::filesystem::path(argv[5])/frame/L"exposure.raw")) throw std::runtime_error("Missing SR sequence exposure before NGX initialization");
+        }
+    }
     std::filesystem::create_directories(logs);
     std::string guid;for(const wchar_t c:std::wstring(argv[4])) guid.push_back(static_cast<char>(c));
     Microsoft::WRL::ComPtr<IDXGIFactory1> factory;
@@ -142,7 +161,7 @@ int wmain(int argc,wchar_t** argv) try {
             ExitProcess(8);
         }
         std::cout<<"GPU fence completed=1"<<std::endl;
-        if(evaluate) return evaluateCapturedFrame(session.device12.Get(),queue.Get(),session.feature,session.parameters,argv[5],logs,std::wstring(argv[1])==L"d3d12-hdr-neutral",srDiagnostic);
+        if(evaluate) return evaluateCapturedFrame(session.device12.Get(),queue.Get(),session.feature,session.parameters,argv[5],logs,std::wstring(argv[1])==L"d3d12-hdr-neutral",srDiagnostic,sequenceMode);
         std::cout<<"STOP create/completion passed; no evaluate"<<std::endl;
         return 0;
     }

@@ -30,7 +30,7 @@ target_compile_definitions(ac7_shared_bridge PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN
 target_include_directories(ac7_shared_bridge PUBLIC src/d3d11)
 target_link_libraries(ac7_shared_bridge PUBLIC d3d11 d3d12 dxgi)
 
-option(AC7_BUILD_DEVELOPMENT "Build diagnostic hosts and experimental ASI" OFF)
+option(AC7_BUILD_DEVELOPMENT "Build the native NR/SR ASI" OFF)
 if(AC7_BUILD_DEVELOPMENT)
   add_subdirectory(development)
 endif()

@@ -11,7 +11,20 @@ constexpr char source[] = R"(
 Texture2D<float> Depth : register(t0);
 Texture2D<float2> PackedMotion : register(t1);
 RWTexture2D<float> NormalizedDepth : register(u0);
+#ifdef MODEL_MOTION
+RWTexture2D<uint2> NormalizedMotion : register(u1);
+// Existing gpu_chain half-even motion encoder; store bits to avoid typed-half truncation.
+uint HalfMotion(float v,uint odd,int scaleExponent,bool negate){
+ uint bits=asuint(v),sign=((bits>>16)&32768)^(negate?32768:0),e=(bits>>23)&255,m=bits&0x7fffff;
+ if(e!=0)m|=0x800000;else e=1;if(m==0)return sign;
+ uint product=m*odd;int top=firstbithigh(product),he=top+int(e)-135+scaleExponent;
+ int shift=he>0?top-10:126-int(e)-scaleExponent;if(shift>31)return sign;
+ uint q=product>>shift,remainder=product&((1u<<shift)-1),mid=1u<<(shift-1);if(remainder>mid||(remainder==mid&&(q&1)))q++;
+ if(he<=0)return sign|q;if(q>=2048){q>>=1;he++;}return sign|(he>=31?31744:((uint(he)<<10)|(q&1023)));
+}
+#else
 RWTexture2D<float2> NormalizedMotion : register(u1);
+#endif
 RWTexture2D<uint> Validity : register(u2);
 cbuffer Parameters : register(b0) { uint4 Rect; float4 Previous0, Previous1, Previous2, Previous3; };
 [numthreads(8,8,1)]
@@ -35,33 +48,41 @@ void main(uint3 id : SV_DispatchThreadID) {
         }
     }
     NormalizedDepth[id.xy] = valid == 3 ? 0 : z;
+#ifdef MODEL_MOTION
+    motion = valid == 3 ? float2(0,0) : motion;
+    NormalizedMotion[id.xy] = uint2(HalfMotion(motion.x,5,Rect.z==5120?9:8,true),HalfMotion(motion.y,45,4,false));
+#else
     NormalizedMotion[id.xy] = valid == 3 ? float2(0,0) : motion;
+#endif
     Validity[id.xy] = valid;
 }
 )";
 struct Constants { ViewRect rect; ClipToPrevious matrix; };
 static_assert(sizeof(Constants) == 80);
 }
-GuideNormalizer::GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t height)
+GuideNormalizer::GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t height, bool modelMotion)
     : width_(width), height_(height), device_(device) {
     if (!device || !width || !height || width > 8192 || height > 8192) throw std::invalid_argument("Invalid guide extent/device");
+    if(modelMotion&&((width!=2560&&width!=5120)||height!=1440))throw std::invalid_argument("Unsupported model-motion extent");
     ComPtr<ID3D11Device1> device1; check(device->QueryInterface(IID_PPV_ARGS(&device1)));
     D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0, actual;
     check(device1->CreateDeviceContextState(0, &level, 1, D3D11_SDK_VERSION, __uuidof(ID3D11Device), &actual, &state_));
     ComPtr<ID3DBlob> code, errors;
-    HRESULT hr = D3DCompile(source, sizeof(source)-1, "ac7_guide_normalizer", nullptr, nullptr, "main", "cs_5_0",
+    const D3D_SHADER_MACRO macros[]={{"MODEL_MOTION","1"},{nullptr,nullptr}};
+    HRESULT hr = D3DCompile(source, sizeof(source)-1, "ac7_guide_normalizer", modelMotion?macros:nullptr, nullptr, "main", "cs_5_0",
         D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_IEEE_STRICTNESS, 0, &code, &errors);
     if (FAILED(hr)) throw std::runtime_error(errors ? static_cast<const char*>(errors->GetBufferPointer()) : "Guide shader compilation failed");
     check(device->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &shader_));
     D3D11_BUFFER_DESC buffer{}; buffer.ByteWidth = sizeof(Constants); buffer.Usage = D3D11_USAGE_DEFAULT; buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     check(device->CreateBuffer(&buffer, nullptr, &constants_));
     ComPtr<ID3D11Texture2D>* textures[] = { &depth_, &motion_, &validity_ };
-    const DXGI_FORMAT formats[] = { DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32_UINT };
+    const DXGI_FORMAT formats[] = { DXGI_FORMAT_R32_FLOAT, modelMotion?DXGI_FORMAT_R16G16_TYPELESS:DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32_UINT };
     for (unsigned i = 0; i < 3; i++) {
         D3D11_TEXTURE2D_DESC d{}; d.Width = width; d.Height = height; d.MipLevels = d.ArraySize = 1; d.SampleDesc.Count = 1;
         d.Format = formats[i]; d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
         check(device->CreateTexture2D(&d, nullptr, textures[i]->GetAddressOf()));
-        check(device->CreateUnorderedAccessView(textures[i]->Get(), nullptr, &views_[i]));
+        D3D11_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=DXGI_FORMAT_R16G16_UINT;view.ViewDimension=D3D11_UAV_DIMENSION_TEXTURE2D;
+        check(device->CreateUnorderedAccessView(textures[i]->Get(), modelMotion&&i==1?&view:nullptr, &views_[i]));
     }
 }
 void GuideNormalizer::record(ID3D11DeviceContext* context, ID3D11Texture2D* depth,

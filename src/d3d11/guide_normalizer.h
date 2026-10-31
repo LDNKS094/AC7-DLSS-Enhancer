@@ -10,15 +10,16 @@ struct ViewRect { uint32_t x, y, width, height; };
 using ClipToPrevious = std::array<std::array<float, 4>, 4>;
 class GuideNormalizer {
 public:
-    GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t height);
+    GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t height, bool modelMotion=false);
     // Immediate context, serialized calls only. Reads allocation coordinates; outputs a cropped active view.
-    // Motion is current-minus-previous NDC in the observed game convention, not a DLSS unit claim.
+    // modelMotion uses the established half-even encoder, backward pixels in compatible RG16 typeless storage.
+    // Default motion is current-minus-previous NDC in the observed game convention.
     // Caller establishes temporal/jitter semantics and keeps outputs alive through use.
     void record(ID3D11DeviceContext* context, ID3D11Texture2D* depth,
                 ID3D11Texture2D* packedMotion, ViewRect rect, const ClipToPrevious& transform);
     ID3D11Texture2D* depth() const { return depth_.Get(); }
     ID3D11Texture2D* motion() const { return motion_.Get(); }
-    // 1=camera fallback, 2=packed object velocity, 3=invalid guide; never admit mask 3 to a model.
+    // 1=camera fallback, 2=object velocity, 3=invalid (cleared depth/motion, not valid history evidence).
     ID3D11Texture2D* validity() const { return validity_.Get(); }
 private:
     uint32_t width_, height_;

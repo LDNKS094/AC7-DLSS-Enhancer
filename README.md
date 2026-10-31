@@ -2,13 +2,13 @@
 
 AC7原生NR/SR实现。处理链为原生HDR/depth/MV/View → D11→D12 → SDR代理 → NR → HDR恢复 → 同尺寸SR → D11返回 → 游戏原warp/post/tonemap。
 
-模型按真实资源和View关联接入，不使用关卡或shader哈希白名单。跨场景计数/时钟重启时开启新序列、Reset模型历史，GPU传输token保持单调。当前后端为5120×1440分配、中央2560或全宽5120 View、R11 HDR与既有depth/MV协议；P=1未校准、SR为同尺寸DLAA，FG与周边压缩尚未接入。
+模型按真实资源和View关联接入，不使用关卡、shader哈希或分辨率白名单。处理尺寸跟随游戏实际纹理allocation与有效View，运行中尺寸变化时退休旧工作、重建尺寸资源并重置模型历史，device/queue继续复用。当前支持R11 HDR与既有depth/MV协议，jitter为0；P=1未校准、SR为同尺寸DLAA，FG与周边压缩尚未接入。
 
 | 游戏前台快捷键 | 功能 |
 |---|---|
 | Ctrl+Shift+F10 | 开关NR，SR继续 |
 | Ctrl+Shift+F11 | 手动重载ASI旁的INI |
-| Ctrl+Shift+F12 | 保存同帧NR前后HDR的共同映射BMP预览，位于SR之前 |
+| Ctrl+Shift+F12 | 保存同帧原HDR与NR＋SR最终输出的共同映射BMP预览 |
 
 [当前状态](development/docs/STATUS.md) · [游戏操作](development/docs/GAME-RUNBOOK.md) · [数据契约](development/docs/DATA-CONTRACT.md) · [路线](development/docs/ROUTES.md)
 

@@ -13,7 +13,7 @@ struct Constants {ViewRect rect;float exposure;float padding[3]{};};
 static_assert(sizeof(Constants)==32,"HLSL/root-constant layout");
 }
 HdrProxy12::HdrProxy12(ID3D12Device*d,uint32_t width,uint32_t height):width_(width),height_(height),stride_(0),device_(d){
-    if(!d||!width||!height||width>8192||height>8192)throw std::invalid_argument("Invalid HDR12 device/extent");
+    if(!d||!width||!height||width>D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION||height>D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION)throw std::invalid_argument("Invalid HDR12 device/extent");
     D3D12_DESCRIPTOR_RANGE ranges[2]{};ranges[0]={D3D12_DESCRIPTOR_RANGE_TYPE_SRV,3,0,0,0};ranges[1]={D3D12_DESCRIPTOR_RANGE_TYPE_UAV,1,0,0,3};
     D3D12_ROOT_PARAMETER params[2]{};params[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;params[0].Constants={0,0,8};params[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;params[1].DescriptorTable={2,ranges};
     D3D12_ROOT_SIGNATURE_DESC signature{2,params,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_NONE};ComPtr<ID3DBlob>code,error;

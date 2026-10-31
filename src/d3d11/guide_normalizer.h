@@ -12,7 +12,7 @@ class GuideNormalizer {
 public:
     GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t height, bool modelMotion=false);
     // Immediate context, serialized calls only. Reads allocation coordinates; outputs a cropped active view.
-    // modelMotion uses the established half-even encoder, backward pixels in compatible RG16 typeless storage.
+    // modelMotion stores backward pixels using explicit float-to-half conversion in RG16 typeless storage.
     // Default motion is current-minus-previous NDC in the observed game convention.
     // Caller establishes temporal/jitter semantics and keeps outputs alive through use.
     void record(ID3D11DeviceContext* context, ID3D11Texture2D* depth,

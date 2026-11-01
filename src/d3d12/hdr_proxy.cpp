@@ -13,7 +13,7 @@ namespace ac7 {
 namespace {
 void check(HRESULT hr){if(FAILED(hr))throw std::runtime_error("HDR12 HRESULT "+std::to_string(hr));}
 void transition(ID3D12GraphicsCommandList*l,ID3D12Resource*r,D3D12_RESOURCE_STATES a,D3D12_RESOURCE_STATES b){D3D12_RESOURCE_BARRIER v{};v.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;v.Transition={r,D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,a,b};l->ResourceBarrier(1,&v);}
-struct Constants {ViewRect rect;float exposure;float padding[3]{};};
+struct Constants {ViewRect rect;float exposure;uint32_t linearEdits=0;float padding[2]{};};
 static_assert(sizeof(Constants)==32,"HLSL/root-constant layout");
 }
 HdrProxy12::HdrProxy12(ID3D12Device*d,uint32_t width,uint32_t height,DXGI_FORMAT hdrFormat):width_(width),height_(height),stride_(0),hdrFormat_(hdrFormat),device_(d){
@@ -64,15 +64,16 @@ void HdrProxy12::descriptors(unsigned pass,ID3D12Resource*source,ID3D12Resource*
         else {D3D12_SHADER_RESOURCE_VIEW_DESC view{};view.Format=row[slot]?row[slot]->GetDesc().Format:DXGI_FORMAT_R16G16B16A16_FLOAT;view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;view.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;view.Texture2D.MipLevels=1;device_->CreateShaderResourceView(row[slot],&view,cpu);}
     }
 }
-void HdrProxy12::bind(ID3D12GraphicsCommandList*l,ViewRect rect,float exposure){
-    ID3D12DescriptorHeap* heaps[]={heap_.Get()};l->SetDescriptorHeaps(1,heaps);l->SetComputeRootSignature(root_.Get());Constants constants{rect,exposure};l->SetComputeRoot32BitConstants(0,8,&constants,0);
+void HdrProxy12::bind(ID3D12GraphicsCommandList*l,ViewRect rect,float exposure,bool linearEdits){
+    ID3D12DescriptorHeap* heaps[]={heap_.Get()};l->SetDescriptorHeaps(1,heaps);l->SetComputeRootSignature(root_.Get());Constants constants{rect,exposure,unsigned(linearEdits)};l->SetComputeRoot32BitConstants(0,8,&constants,0);
 }
 void HdrProxy12::prepare(ID3D12GraphicsCommandList*l,ID3D12Resource*hdr,ViewRect rect,float exposure){
     validate(l,hdr,rect,exposure,nullptr);if(source_)throw std::invalid_argument("HDR12 preparation already outstanding");descriptors(0,hdr,nullptr,nullptr,prepared_.Get());bind(l,rect,exposure);
     transition(l,prepared_.Get(),D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);l->SetPipelineState(pipelines_[0].Get());l->SetComputeRootDescriptorTable(1,heap_->GetGPUDescriptorHandleForHeapStart());l->Dispatch((width_+7)/8,(height_+7)/8,1);transition(l,prepared_.Get(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_COMMON);source_=hdr;rect_=rect;exposure_=exposure;
 }
-void HdrProxy12::restore(ID3D12GraphicsCommandList*l,ID3D12Resource*hdr,ViewRect rect,float exposure,ID3D12Resource*neural){
-    validate(l,hdr,rect,exposure,neural);if(source_!=hdr||rect.x!=rect_.x||rect.y!=rect_.y||rect.width!=rect_.width||rect.height!=rect_.height||exposure!=exposure_)throw std::invalid_argument("HDR12 preparation mismatch");descriptors(1,hdr,prepared_.Get(),neural?neural:prepared_.Get(),restored_.Get());if(color_!=restored_)descriptors(2,restored_.Get(),nullptr,nullptr,color_.Get());bind(l,rect,exposure);
+void HdrProxy12::restore(ID3D12GraphicsCommandList*l,ID3D12Resource*hdr,ViewRect rect,float exposure,ID3D12Resource*neural,bool linearEdits){
+    if(linearEdits&&!neural)throw std::invalid_argument("Missing NR edit texture");
+    validate(l,hdr,rect,exposure,neural);if(source_!=hdr||rect.x!=rect_.x||rect.y!=rect_.y||rect.width!=rect_.width||rect.height!=rect_.height||exposure!=exposure_)throw std::invalid_argument("HDR12 preparation mismatch");descriptors(1,hdr,prepared_.Get(),neural?neural:prepared_.Get(),restored_.Get());if(color_!=restored_)descriptors(2,restored_.Get(),nullptr,nullptr,color_.Get());bind(l,rect,exposure,linearEdits);
     transition(l,prepared_.Get(),D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     auto gpu=heap_->GetGPUDescriptorHandleForHeapStart();gpu.ptr+=4*stride_;ID3D12Resource* outputs[]={nullptr,restored_.Get(),color_.Get()};
     for(unsigned i=1;i<(color_==restored_?2u:3u);i++,gpu.ptr+=4*stride_){

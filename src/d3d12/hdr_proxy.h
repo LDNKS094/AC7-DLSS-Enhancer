@@ -15,14 +15,14 @@ public:
     // They must use the same retained HDR contents, rect and exposure; only one preparation is outstanding.
     // Null neural reads the actual FP16 proxy as an identity diagnostic.
     void prepare(ID3D12GraphicsCommandList* list,ID3D12Resource* hdr,ViewRect rect,float exposure);
-    void restore(ID3D12GraphicsCommandList* list,ID3D12Resource* hdr,ViewRect rect,float exposure,ID3D12Resource* neural=nullptr);
+    void restore(ID3D12GraphicsCommandList* list,ID3D12Resource* hdr,ViewRect rect,float exposure,ID3D12Resource* neural=nullptr,bool linearEdits=false);
     void record(ID3D12GraphicsCommandList* list,ID3D12Resource* hdr,ViewRect rect,float exposure,ID3D12Resource* neural=nullptr);
     ID3D12Resource* prepared() const {return prepared_.Get();}
     ID3D12Resource* restored() const {return restored_.Get();}
     ID3D12Resource* srColor() const {return color_.Get();}
 private:
     void validate(ID3D12GraphicsCommandList* list,ID3D12Resource* hdr,ViewRect rect,float exposure,ID3D12Resource* neural);
-    void bind(ID3D12GraphicsCommandList* list,ViewRect rect,float exposure);
+    void bind(ID3D12GraphicsCommandList* list,ViewRect rect,float exposure,bool linearEdits=false);
     void descriptors(unsigned pass,ID3D12Resource* source,ID3D12Resource* prepared,ID3D12Resource* neural,ID3D12Resource* output);
     uint32_t width_,height_,stride_;
     DXGI_FORMAT hdrFormat_;

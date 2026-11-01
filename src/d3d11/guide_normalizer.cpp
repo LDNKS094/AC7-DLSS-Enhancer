@@ -78,7 +78,7 @@ GuideNormalizer::GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t 
 }
 void GuideNormalizer::record(ID3D11DeviceContext* context, ID3D11Texture2D* depth,
                              ID3D11Texture2D* packedMotion, ViewRect rect, const ClipToPrevious& matrix,const std::array<float,2>& projectionJitter) {
-    if (!context || !depth || !packedMotion || context->GetType() != D3D11_DEVICE_CONTEXT_IMMEDIATE ||
+    if (!context || !depth || context->GetType() != D3D11_DEVICE_CONTEXT_IMMEDIATE ||
         rect.width != width_ || rect.height != height_) throw std::invalid_argument("Invalid guide context/rect/input");
     for (const auto& row : matrix) for (float v : row) if (!std::isfinite(v)) throw std::invalid_argument("Nonfinite previous-clip transform");
     for(float v:projectionJitter)if(!std::isfinite(v))throw std::invalid_argument("Nonfinite projection jitter");
@@ -88,6 +88,8 @@ void GuideNormalizer::record(ID3D11DeviceContext* context, ID3D11Texture2D* dept
     const DXGI_FORMAT formats[] = { DXGI_FORMAT_R32G8X24_TYPELESS, DXGI_FORMAT_R16G16_UNORM };
     std::array<ComPtr<ID3D11ShaderResourceView>, 2> inputViews;
     for (unsigned i = 0; i < 2; i++) {
+        // D3D11 null SRV reads zero: absent native velocity uses the existing real camera transform fallback.
+        if(i==1&&!inputs[i])continue;
         actual.Reset(); inputs[i]->GetDevice(&actual);
         if (actual.Get() != device_.Get()) throw std::invalid_argument("Guide resource device mismatch");
         D3D11_TEXTURE2D_DESC d; inputs[i]->GetDesc(&d);

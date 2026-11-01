@@ -4,6 +4,10 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#ifdef AC7_EMBED_HDR_SHADERS
+#include "ac7_hdr_Prepare.h"
+#include "ac7_hdr_Restore.h"
+#endif
 using Microsoft::WRL::ComPtr;
 namespace ac7 {
 namespace {
@@ -12,7 +16,8 @@ void transition(ID3D12GraphicsCommandList*l,ID3D12Resource*r,D3D12_RESOURCE_STAT
 struct Constants {ViewRect rect;float exposure;float padding[3]{};};
 static_assert(sizeof(Constants)==32,"HLSL/root-constant layout");
 }
-HdrProxy12::HdrProxy12(ID3D12Device*d,uint32_t width,uint32_t height):width_(width),height_(height),stride_(0),device_(d){
+HdrProxy12::HdrProxy12(ID3D12Device*d,uint32_t width,uint32_t height,DXGI_FORMAT hdrFormat):width_(width),height_(height),stride_(0),hdrFormat_(hdrFormat),device_(d){
+    if(hdrFormat!=DXGI_FORMAT_R11G11B10_FLOAT&&hdrFormat!=DXGI_FORMAT_R16G16B16A16_FLOAT)throw std::invalid_argument("Unsupported HDR12 source format");
     if(!d||!width||!height||width>D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION||height>D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION)throw std::invalid_argument("Invalid HDR12 device/extent");
     D3D12_DESCRIPTOR_RANGE ranges[2]{};ranges[0]={D3D12_DESCRIPTOR_RANGE_TYPE_SRV,3,0,0,0};ranges[1]={D3D12_DESCRIPTOR_RANGE_TYPE_UAV,1,0,0,3};
     D3D12_ROOT_PARAMETER params[2]{};params[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;params[0].Constants={0,0,8};params[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;params[1].DescriptorTable={2,ranges};
@@ -20,11 +25,18 @@ HdrProxy12::HdrProxy12(ID3D12Device*d,uint32_t width,uint32_t height):width_(wid
     check(D3D12SerializeRootSignature(&signature,D3D_ROOT_SIGNATURE_VERSION_1,&code,&error));check(d->CreateRootSignature(0,code->GetBufferPointer(),code->GetBufferSize(),IID_PPV_ARGS(&root_)));
     const char* convert="Texture2D<float4> source:register(t0);RWTexture2D<float4> color:register(u0);cbuffer C:register(b0){uint2 base;uint2 size;float exposure;float3 pad;};[numthreads(8,8,1)]void Color(uint3 p:SV_DispatchThreadID){if(all(p.xy<size))color[p.xy]=float4(source.Load(int3(p.xy,0)).rgb,1);}";
     for(unsigned i=0;i<3;i++){
+        if(i==2&&hdrFormat_==DXGI_FORMAT_R16G16B16A16_FLOAT){color_=restored_;break;}
         code.Reset();error.Reset();const UINT flags=D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_IEEE_STRICTNESS;
-        const auto hr=i==2?D3DCompile(convert,std::strlen(convert),nullptr,nullptr,nullptr,"Color","cs_5_0",flags,0,&code,&error):D3DCompileFromFile(AC7_HDR_SHADER_PATH,nullptr,nullptr,i?"Restore":"Prepare","cs_5_0",flags,0,&code,&error);
+        HRESULT hr=S_OK;
+#ifdef AC7_EMBED_HDR_SHADERS
+        if(i<2){const void*bytes=i?static_cast<const void*>(ac7_hdr_Restore):ac7_hdr_Prepare;const size_t size=i?sizeof(ac7_hdr_Restore):sizeof(ac7_hdr_Prepare);check(D3DCreateBlob(size,&code));std::memcpy(code->GetBufferPointer(),bytes,size);}
+        else hr=D3DCompile(convert,std::strlen(convert),nullptr,nullptr,nullptr,"Color","cs_5_0",flags,0,&code,&error);
+#else
+        hr=i==2?D3DCompile(convert,std::strlen(convert),nullptr,nullptr,nullptr,"Color","cs_5_0",flags,0,&code,&error):D3DCompileFromFile(AC7_HDR_SHADER_PATH,nullptr,nullptr,i?"Restore":"Prepare","cs_5_0",flags,0,&code,&error);
+#endif
         if(FAILED(hr))throw std::runtime_error(error?std::string(static_cast<const char*>(error->GetBufferPointer()),error->GetBufferSize()):"HDR12 compile failed");
         D3D12_COMPUTE_PIPELINE_STATE_DESC pso{};pso.pRootSignature=root_.Get();pso.CS={code->GetBufferPointer(),code->GetBufferSize()};check(d->CreateComputePipelineState(&pso,IID_PPV_ARGS(&pipelines_[i])));
-        const auto format=i==1?DXGI_FORMAT_R11G11B10_FLOAT:DXGI_FORMAT_R16G16B16A16_FLOAT;
+        const auto format=i==1?hdrFormat_:DXGI_FORMAT_R16G16B16A16_FLOAT;
         D3D12_FEATURE_DATA_FORMAT_SUPPORT support{format};check(d->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support)));
         if(!(support.Support2&D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE)||!(support.Support1&D3D12_FORMAT_SUPPORT1_SHADER_LOAD))throw std::runtime_error("HDR12 typed store/load unavailable");
         D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;desc.Width=width;desc.Height=height;desc.DepthOrArraySize=desc.MipLevels=desc.SampleDesc.Count=1;desc.Format=format;desc.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
@@ -40,7 +52,7 @@ void HdrProxy12::validate(ID3D12GraphicsCommandList*l,ID3D12Resource*hdr,ViewRec
         auto* resource=i?neural:hdr;if(!resource)continue;
         actual.Reset();check(resource->GetDevice(IID_PPV_ARGS(&actual)));if(actual.Get()!=device_.Get())throw std::invalid_argument("HDR12 texture device mismatch");
         const auto desc=resource->GetDesc();
-        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||desc.Format!=(i?DXGI_FORMAT_R16G16B16A16_FLOAT:DXGI_FORMAT_R11G11B10_FLOAT)||desc.MipLevels!=1||desc.DepthOrArraySize!=1||desc.SampleDesc.Count!=1||desc.SampleDesc.Quality||(desc.Flags&D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE))throw std::invalid_argument("Unsupported HDR12 texture layout");
+        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||desc.Format!=(i?DXGI_FORMAT_R16G16B16A16_FLOAT:hdrFormat_)||desc.MipLevels!=1||desc.DepthOrArraySize!=1||desc.SampleDesc.Count!=1||desc.SampleDesc.Quality||(desc.Flags&D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE))throw std::invalid_argument("Unsupported HDR12 texture layout");
         if(i?(desc.Width!=width_||desc.Height!=height_):(desc.Width<width_||desc.Height<height_||rect.x>desc.Width-width_||rect.y>desc.Height-height_))throw std::invalid_argument("Invalid HDR12 region");
         if(resource==prepared_.Get()||resource==restored_.Get()||resource==color_.Get())throw std::invalid_argument("HDR12 input/output alias");
     }
@@ -60,10 +72,10 @@ void HdrProxy12::prepare(ID3D12GraphicsCommandList*l,ID3D12Resource*hdr,ViewRect
     transition(l,prepared_.Get(),D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);l->SetPipelineState(pipelines_[0].Get());l->SetComputeRootDescriptorTable(1,heap_->GetGPUDescriptorHandleForHeapStart());l->Dispatch((width_+7)/8,(height_+7)/8,1);transition(l,prepared_.Get(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_COMMON);source_=hdr;rect_=rect;exposure_=exposure;
 }
 void HdrProxy12::restore(ID3D12GraphicsCommandList*l,ID3D12Resource*hdr,ViewRect rect,float exposure,ID3D12Resource*neural){
-    validate(l,hdr,rect,exposure,neural);if(source_!=hdr||rect.x!=rect_.x||rect.y!=rect_.y||rect.width!=rect_.width||rect.height!=rect_.height||exposure!=exposure_)throw std::invalid_argument("HDR12 preparation mismatch");descriptors(1,hdr,prepared_.Get(),neural?neural:prepared_.Get(),restored_.Get());descriptors(2,restored_.Get(),nullptr,nullptr,color_.Get());bind(l,rect,exposure);
+    validate(l,hdr,rect,exposure,neural);if(source_!=hdr||rect.x!=rect_.x||rect.y!=rect_.y||rect.width!=rect_.width||rect.height!=rect_.height||exposure!=exposure_)throw std::invalid_argument("HDR12 preparation mismatch");descriptors(1,hdr,prepared_.Get(),neural?neural:prepared_.Get(),restored_.Get());if(color_!=restored_)descriptors(2,restored_.Get(),nullptr,nullptr,color_.Get());bind(l,rect,exposure);
     transition(l,prepared_.Get(),D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     auto gpu=heap_->GetGPUDescriptorHandleForHeapStart();gpu.ptr+=4*stride_;ID3D12Resource* outputs[]={nullptr,restored_.Get(),color_.Get()};
-    for(unsigned i=1;i<3;i++,gpu.ptr+=4*stride_){
+    for(unsigned i=1;i<(color_==restored_?2u:3u);i++,gpu.ptr+=4*stride_){
         transition(l,outputs[i],D3D12_RESOURCE_STATE_COMMON,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);l->SetPipelineState(pipelines_[i].Get());l->SetComputeRootDescriptorTable(1,gpu);l->Dispatch((width_+7)/8,(height_+7)/8,1);
         transition(l,outputs[i],D3D12_RESOURCE_STATE_UNORDERED_ACCESS,i==2?D3D12_RESOURCE_STATE_COMMON:D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }

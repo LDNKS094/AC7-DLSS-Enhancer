@@ -5,7 +5,7 @@ namespace ac7 {
 // Fixed-size local color passes, not a model or game host.
 class HdrProxy12 {
 public:
-    HdrProxy12(ID3D12Device* device,uint32_t width,uint32_t height);
+    HdrProxy12(ID3D12Device* device,uint32_t width,uint32_t height,DXGI_FORMAT hdrFormat=DXGI_FORMAT_R11G11B10_FLOAT);
     HdrProxy12(const HdrProxy12&)=delete;
     HdrProxy12& operator=(const HdrProxy12&)=delete;
     // Exclusive DIRECT list. HDR/neural enter and remain NON_PIXEL_SHADER_RESOURCE.
@@ -25,6 +25,7 @@ private:
     void bind(ID3D12GraphicsCommandList* list,ViewRect rect,float exposure);
     void descriptors(unsigned pass,ID3D12Resource* source,ID3D12Resource* prepared,ID3D12Resource* neural,ID3D12Resource* output);
     uint32_t width_,height_,stride_;
+    DXGI_FORMAT hdrFormat_;
     ID3D12Resource* source_=nullptr;
     ViewRect rect_{};
     float exposure_=0;

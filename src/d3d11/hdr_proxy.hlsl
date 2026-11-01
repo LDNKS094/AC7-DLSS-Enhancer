@@ -37,7 +37,7 @@ float3 tone(float3 x) {return saturate((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14));}
     float peak=max(e.r,max(e.g,e.b));
     float shoulder=pow(max(t.r,max(t.g,t.b)),1.0/2.2);
     float mask=smoothstep(1,8,peak)*smoothstep(.75,.99,shoulder);
-    float3 y=x+(1-mask)*(pow(n,2.2)-pow(p,2.2))*(e/max(t,1e-6))/Exposure;
+    float3 y=x+(1-mask)*(pow(max(n,0),2.2)-pow(max(p,0),2.2))*(e/max(t,1e-6))/Exposure;
     // Withhold invalid model output; never pass NaN/negative values into later game passes.
     bool valid=all(isfinite(n))&&all(n>=0)&&all(n<=1)&&all(isfinite(y));
     Output[id.xy]=float4(valid?clamp(y,0,65504):x,1);

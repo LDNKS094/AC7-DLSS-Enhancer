@@ -10,3 +10,12 @@
 /.vs/
 __pycache__/
 *.user
+/third_party/ngx/lib/
+/third_party/models/
+/third_party/downloads/
+/development/history/captures/
+/development/history/evidence/
+/development/history/experiments/
+/development/history/references/
+/development/history/recovery/
+/trash/

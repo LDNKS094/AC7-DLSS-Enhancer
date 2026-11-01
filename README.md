@@ -1,16 +1,35 @@
 # AC7 Native Adapter
 
-总体目标为 AC7 原生 Pre-SR NR、SR、FG 及超宽屏 NR 适配。NR／SR／可调周边压缩的实机基线为 `f918479`／nr-config，用户反馈未发现明显问题。当前 [runtime-opt 候选](development/build/runtime-opt/development/Release/AC7NativeModels.asi) 在清理旧验证／失败回退后，进一步收敛常量复制、SRV 重建、无消费者 validity 输出、共享复制包装和 RCAS-only 无效工作；意外运行错误记录 fatal 后直接终止。已构建、未实机，收益未测。下一阶段选择 NVIDIA 官方 DLSSG，OptiScaler 仅作必要部分参考，FG 尚未实现。
+目标是 AC7 原生 HDR NR／SR、超宽屏 NR 周边减负和 NVIDIA 官方 DLSSG 接入。NR／SR／周边压缩已有用户实机反馈；FG 尚未接通。
 
-此前 SR 基线 `762cfa8`／`hud-lifetime` 和独立开关留档 `e326737` 均保留。菜单／Logo／HUD 缩小问题已结案；原生交接前保留同帧 UI 资源身份供图调度使用。一次性 D3D11 截帧分支已移除，捕获和历史二进制保留。当前实机结论不扩大为所有关卡／配置已覆盖或性能收益已测得。
+最新 [ASI](development/artifacts/releases/gpu-context-simple/AC7NativeModels.asi) 已从整理后的稳定依赖重新构建，未实机。它包含统一设备／队列与设备期 NGX 会话、运行链优化及意外错误 FailFast；没有固定 FG 倍率或独立 RCAS 专用分支。本次留档包含上下文实现与目录整理，前序运行链优化基线为 `961ec1a`。
 
-当前候选将 HDR DLSS SR 接入原生后处理图的时序逻辑位置：低分几何、透明与 Distortion 先按原生网格完成；图调度落实颜色输入后执行 SR，再由高分颜色链继续处理。深度、stencil、GBuffer 与低分运动 tile 不再整体放大。
+## 目录与文档
 
-流程重整及 HUD 修复已获用户实机反馈。该结果限于已体验范围，不表示所有关卡和配置均已覆盖。NR 使用同一队列中的 SDR 代理→NR→FP16 HDR 恢复→现有 SR；RCAS 可选在 SR 后执行。不调整 jitter 序列、mip 或其它画质参数，不读写游戏 AA 字段，FXAA 仍由用户手动关闭。
+| 路径 | 职责 |
+|---|---|
+| `src/` | 自有可复用核心 |
+| `development/src/`、`development/tools/neutral-asi/` | ASI 与游戏接线 |
+| `third_party/` | 正式第三方源码、SDK、loader 和模型，见其 [说明](third_party/README.md) |
+| `development/build/` | 可整目录删除的生成输出，不保存唯一源码或依赖 |
+| `development/artifacts/releases/`、`build-logs/` | 本机交付候选与对应构建日志 |
+| `development/history/` | 经过筛选的专题记录、原始捕获、实现证据及参考快照，见 [索引](development/history/README.md) |
+| `trash/20261102-reorganization/` | 本轮隔离的停用实验／派生数据，未永久删除 |
 
-## 使用
+当前事实以 [STATUS](development/docs/STATUS.md) 为准，下一步看 [ROUTES](development/docs/ROUTES.md)，输入及生命周期看 [DATA-CONTRACT](development/docs/DATA-CONTRACT.md)，使用看 [GAME-RUNBOOK](development/docs/GAME-RUNBOOK.md)。[SR 阶段职责](development/docs/SR-LOGIC-PLAN.md)与[问题记录](development/docs/PROBLEM-RECORD.md)是支持资料；历史报告不作为现行实施要求。个人笔记由用户维护。
 
-本次候选：[AC7NativeModels.asi](development/build/runtime-opt/development/Release/AC7NativeModels.asi)。完全退出游戏后由用户替换原加载位置的本项目 ASI，只加载一份。沿用 ASI 旁的 INI、模型目录与 DLL，保留宽屏、dinput8、UE4SS 和其它模组。
+## 构建与使用
+
+Windows、Visual Studio 2022 C++ 工具链、Windows SDK／FXC、CMake。正式依赖默认从仓库 `third_party` 读取，不再依赖相邻项目或历史实验目录：
+
+```powershell
+cmake -S . -B development/build/current -G "Visual Studio 17 2022" -DAC7_BUILD_DEVELOPMENT=ON
+cmake --build development/build/current --config Release --target ac7-native-models --parallel 4
+```
+
+生成 `development/build/current/development/Release/AC7NativeModels.asi`。需要保留交付时另存至 `development/artifacts/releases`；清理 build 不会删除现有交付候选或 SDK。外部依赖覆盖参数仍为 `AC7_MINHOOK_SOURCE_DIR`、`NGX_INCLUDE_DIR`、`NGX_LOADER_LIBRARY`。
+
+由用户退出游戏后替换本项目 ASI，只加载一份；保留其它模组及游戏设置。ASI 旁使用 `AC7NativeModels.ini` 和 `AC7NativeModels/` 模型目录，模型原件在 `third_party/models/`。助手不部署或启动游戏。
 
 ```ini
 [SR]
@@ -20,44 +39,18 @@ Sharpness=0
 
 [NR]
 Enabled=0
+Intensity=1
+Tone=0.3
+Structure=0.7
+Style=0
 PeripheralCompression=0
 CenterAspect=1.3333333
 EdgeScale=0.5
 TransitionWidth=0.05
 ```
 
-| Mode | 每轴输入比例 |
-|---|---|
-| 0 — Quality | 2/3 |
-| 1 — Balanced | 58% |
-| 2 — Performance | 50% |
+Mode 0／1／2 对应 Quality（2/3）、Balanced（58%）、Performance（50%）。Sharpness 为0–1，0旁路 RCAS。SR 关闭可继续原生尺寸 NR；独立 RCAS 不是目标场景，允许通用链自然工作，不专门适配。SkinStructure 已移除。
 
-Sharpness 为 0–1，0 直接旁路 RCAS；保持 NR 设置不变，对比 0 与 0.4，必要时用 1 观察上限，改后按 Ctrl+Shift+F11。旧 INI 中显式的 0.4 会生效，缺省才取 0；只改锐化不重置模型历史。
+游戏前台 Ctrl+Shift+F10 切换整模组，F11 重载配置，F12 保存下一成功效果帧的 HDR 输入／最终输出预览。F12 包含实际开启的 NR／SR／RCAS 效果，没有单独保存 NR 中间结果。
 
-NR 默认关闭；在已有 `[NR]` 节加入 `Enabled=1` 并按 Ctrl+Shift+F11 可开启，强度参数沿用现有值，缺省为 Intensity=1、Tone=0.3、Structure=0.7、Style=0。SkinStructure 已移除，旧 INI 中残留项会忽略，不触发历史重置；SDK 侧保留原0.5默认传值。NR 开关及开启时有效参数变化重置相关历史。NR 画质与 RCAS 收益分开观察。
-
-首次压缩对比使用 NR Enabled=1、PeripheralCompression=1：中心全高4:3、最外侧横向密度50%、每侧5% View宽度过渡。所有参数可F11热重载，过渡随屏幕构图比例缩放，不随SR档位改变其屏幕比例。PeripheralCompression=0恢复整幅NR，原HDR和SR输入网格不因压缩变小。工作宽度由密度积分决定，这组参数约减少29% NR像素，实际性能未测；详情见[游戏操作](development/docs/GAME-RUNBOOK.md)。
-
-SR 也可将已有 `[SR]` 节的 Enabled 改成 0／1 后按 Ctrl+Shift+F11 实时切换，默认 1。关闭时恢复原生分辨率、不加 SR jitter、不执行 DLSS／DLAA；NR／RCAS 保持各自配置，均关闭时直接原生渲染。重新开启按 Mode 运行并 Reset 模型历史，在途工作按原 fence 完成。
-
-| 游戏前台快捷键 | 功能 |
-|---|---|
-| Ctrl+Shift+F10 | 整模组开关；在途帧自然完成，后续保持原生 |
-| Ctrl+Shift+F11 | 重载配置；SR 状态／档位和有效 NR 参数变化按条件重置历史 |
-| Ctrl+Shift+F12 | 保存下一成功效果帧的 HDR 输入／输出预览与元数据 |
-
-日志 `resolutionReady=1` 仅表示入口安装；`sr-scene sr=1 stage=temporal-graph` 才表示实际 SR 提交。SR 关闭时为 `scene-frame sr=0`，只累计 processedFrames，不累计 srFrames。资源或模型错误记录为 `scene-error` 并停止后续准入，空间输出不会记作 SR。D3D 设备或 View 常量上传失效属于当前帧不可恢复错误。
-
-[状态与限制](development/docs/STATUS.md) · [游戏操作](development/docs/GAME-RUNBOOK.md) · [数据契约](development/docs/DATA-CONTRACT.md) · [执行路线](development/docs/ROUTES.md) · [逻辑计划](development/docs/SR-LOGIC-PLAN.md) · [问题记录](development/docs/PROBLEM-RECORD.md)
-
-## 构建
-
-当前候选构建目录 `development/build/nr-config` 已配置，压缩前版、独立开关及 SR 基线等旧二进制保留：
-
-```text
-cmake --build development/build/nr-config --config Release --target ac7-native-models --parallel 4
-```
-
-新配置需提供 AC7_BUILD_DEVELOPMENT、AC7_MINHOOK_SOURCE_DIR、NGX_INCLUDE_DIR、NGX_LOADER_LIBRARY。MSVC/MASM 构建原生边界，Windows SDK 的 FXC 将局部颜色 shader 编译并嵌入 ASI；可用 AC7_FXC_EXECUTABLE 指定已有工具路径。
-
-旧源码留档为 `ea213fb`；对应当时 ASI 保存在 `development/artifacts/research/sr-state-ea213fb/`，旧 current 二进制也未覆盖。原始捕获、日志、INCOMPLETE、SDK 与模型均保留。本轮只构建交付二进制，不运行测试宿主、不自动部署或启动游戏；游戏性能和新流程实机结果待用户确认。
+原始 View 身份、真实 jitter、原生 RHI 顺序、producer Flush、跨 API fence 及资源退休均保留。意外错误尽力记录 `fatal` 原因后终止，不静默停用；无 GPU 像素读回检查、测试宿主或自动部署。当前没有帧时间收益实测。

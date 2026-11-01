@@ -12,10 +12,10 @@ namespace ac7 {
 class SharedTextureBridge {
 public:
     enum class Result { pending, published, discarded };
-    enum class ColorInput { fp16, ac7NativeHdr, ac7NativeScene };
+    enum class ColorInput { fp16, ac7NativeHdr, ac7NativeScene, ldrScene };
     // Native HDR keeps the allocation extent; guides/output use the cropped View extent.
     SharedTextureBridge(ID3D11Device*, ID3D12Device*, ID3D12CommandQueue*, uint32_t width, uint32_t height,
-        ColorInput color = ColorInput::fp16, uint32_t allocationWidth=0, uint32_t allocationHeight=0);
+        ColorInput color = ColorInput::fp16, uint32_t allocationWidth=0, uint32_t allocationHeight=0,uint32_t outputWidth=0,uint32_t outputHeight=0);
     SharedTextureBridge(const SharedTextureBridge&) = delete;
     SharedTextureBridge& operator=(const SharedTextureBridge&) = delete;
     void upload(uint64_t frame, const std::array<ID3D11Texture2D*, 4>& inputs);
@@ -25,6 +25,8 @@ public:
         const std::array<ID3D11Texture2D*,2>* guides=nullptr);
     // Queue same-frame GPU dependency and return-copy before the caller's original warp.
     // Retire when !busy() and completedValue() >= submittedValue(); never CPU-waits here.
+    ID3D11Texture2D* outputTexture() const{return shared11_[4].Get();}
+    void queueOutputDraw(uint64_t frame,ID3D11CommandList*);
     void queueSceneOutput(uint64_t frame, ID3D11Texture2D* scene, uint32_t left, uint32_t top);
     uint64_t completedValue();
     uint64_t submittedValue() const { return value_; }
@@ -53,7 +55,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Fence> fence11_;
     std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, 5> shared12_;
     std::array<Microsoft::WRL::ComPtr<ID3D11Texture2D>, 5> shared11_;
-    uint32_t width_, height_, allocationWidth_, allocationHeight_;
+    uint32_t width_, height_, allocationWidth_, allocationHeight_,outputWidth_,outputHeight_;
     ColorInput color_;
     uint64_t value_ = 0, frame_ = 0;
     bool active_ = false, submitted_ = false, healthy_ = true, hasFrame_ = false, abandoned_ = false;

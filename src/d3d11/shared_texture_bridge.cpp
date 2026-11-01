@@ -14,9 +14,9 @@ void SharedTextureBridge::check(HRESULT hr, const char* stage) {
     if (FAILED(hr)) { healthy_ = false; throw std::runtime_error(std::string(stage) + " HRESULT " + std::to_string(hr)); }
 }
 SharedTextureBridge::SharedTextureBridge(ID3D11Device* d11, ID3D12Device* d12, ID3D12CommandQueue* queue,
-    uint32_t width, uint32_t height, ColorInput color, uint32_t allocationWidth, uint32_t allocationHeight) : device11_(d11), device12_(d12), queue_(queue), width_(width), height_(height), allocationWidth_(allocationWidth?allocationWidth:width), allocationHeight_(allocationHeight?allocationHeight:height), color_(color) {
-    if (color != ColorInput::fp16 && color != ColorInput::ac7NativeHdr && color != ColorInput::ac7NativeScene) throw std::runtime_error("Unknown bridge color layout");
-    if (!d11 || !d12 || !queue || !width || !height || allocationWidth_<width || allocationHeight_<height || allocationWidth_>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || allocationHeight_>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION)
+    uint32_t width, uint32_t height, ColorInput color, uint32_t allocationWidth, uint32_t allocationHeight,uint32_t outputWidth,uint32_t outputHeight) : device11_(d11), device12_(d12), queue_(queue), width_(width), height_(height), allocationWidth_(allocationWidth?allocationWidth:width), allocationHeight_(allocationHeight?allocationHeight:height),outputWidth_(outputWidth?outputWidth:width),outputHeight_(outputHeight?outputHeight:height), color_(color) {
+    if (color != ColorInput::fp16 && color != ColorInput::ac7NativeHdr && color != ColorInput::ac7NativeScene && color != ColorInput::ldrScene) throw std::runtime_error("Unknown bridge color layout");
+    if (!d11 || !d12 || !queue || !width || !height || allocationWidth_<width || allocationHeight_<height || allocationWidth_>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || allocationHeight_>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || outputWidth_>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || outputHeight_>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION)
         throw std::runtime_error("Invalid bridge extent/device configuration");
     ComPtr<IDXGIDevice> dxgi; check(d11->QueryInterface(IID_PPV_ARGS(&dxgi)));
     ComPtr<IDXGIAdapter> adapter; check(dxgi->GetAdapter(&adapter));
@@ -30,12 +30,13 @@ SharedTextureBridge::SharedTextureBridge(ID3D11Device* d11, ID3D12Device* d12, I
     ComPtr<ID3D11Device5> device5; check(d11->QueryInterface(IID_PPV_ARGS(&device5)));
     ComPtr<ID3D11DeviceContext> immediate; d11->GetImmediateContext(&immediate);
     check(immediate.As(&context11_));
-    if (color_ == ColorInput::ac7NativeScene) check(d11->CreateDeferredContext(0, &deferred_));
+    if (color_ == ColorInput::ac7NativeScene || color_ == ColorInput::ldrScene) check(d11->CreateDeferredContext(0, &deferred_));
     for (unsigned i = 0; i < 5; ++i) {
         D3D11_TEXTURE2D_DESC texture{}; texture.Width = i == 3 ? 1 : width; texture.Height = i == 3 ? 1 : height;
         texture.ArraySize = texture.MipLevels = texture.SampleDesc.Count = 1; texture.Format = Formats[i];
-        if(i == 0 && color_ != ColorInput::fp16) { texture.Width = allocationWidth_; texture.Height = allocationHeight_; texture.Format = DXGI_FORMAT_R11G11B10_FLOAT; }
+        if(i == 0 && color_ != ColorInput::fp16 && color_ != ColorInput::ldrScene) { texture.Width = allocationWidth_; texture.Height = allocationHeight_; texture.Format = DXGI_FORMAT_R11G11B10_FLOAT; }
         if(i == 4 && color_ == ColorInput::ac7NativeScene) texture.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+        if(i == 4){texture.Width=outputWidth_;texture.Height=outputHeight_;}
         texture.Usage = D3D11_USAGE_DEFAULT;
         texture.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
         texture.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
@@ -53,9 +54,9 @@ void SharedTextureBridge::validate(ID3D11Texture2D* texture, unsigned index) con
     ComPtr<ID3D11Device> owner; texture->GetDevice(&owner);
     if (owner.Get() != device11_.Get()) throw std::runtime_error("Bridge D3D11 texture device mismatch");
     D3D11_TEXTURE2D_DESC d{}; texture->GetDesc(&d);
-    const bool native = index == 0 && color_ != ColorInput::fp16;
+    const bool native = index == 0 && color_ != ColorInput::fp16 && color_ != ColorInput::ldrScene;
     const bool packedOutput = index == 4 && color_ == ColorInput::ac7NativeScene;
-    if (d.Width != (native ? allocationWidth_ : index == 3 ? 1 : width_) || d.Height != (native ? allocationHeight_ : index == 3 ? 1 : height_) || (d.Format != ((native || packedOutput) ? DXGI_FORMAT_R11G11B10_FLOAT : Formats[index]) && !(index==2&&color_==ColorInput::ac7NativeScene&&d.Format==DXGI_FORMAT_R16G16_TYPELESS)) ||
+    if (d.Width != (native ? allocationWidth_ : index == 3 ? 1 : index==4?outputWidth_:width_) || d.Height != (native ? allocationHeight_ : index == 3 ? 1 : index==4?outputHeight_:height_) || (d.Format != ((native || packedOutput) ? DXGI_FORMAT_R11G11B10_FLOAT : Formats[index]) && !(index==2&&(color_==ColorInput::ac7NativeScene||color_==ColorInput::ldrScene)&&d.Format==DXGI_FORMAT_R16G16_TYPELESS)) ||
         d.MipLevels != 1 || d.ArraySize != 1 || d.SampleDesc.Count != 1 || d.SampleDesc.Quality)
         throw std::runtime_error("Bridge texture layout mismatch");
     if (index == 4 && texture == shared11_[4].Get()) throw std::runtime_error("Bridge destination aliases shared output");
@@ -74,7 +75,7 @@ void SharedTextureBridge::executeCopies() {
     // D11 runtime retains queued command/resource lifetime; D12 allocator reuse is separately fenced.
 }
 void SharedTextureBridge::uploadScene(uint64_t frame, ID3D11Texture2D* scene, const std::array<ID3D11Texture2D*,2>*guides) {
-    if (color_ != ColorInput::ac7NativeScene) throw std::runtime_error("Scene upload needs native scene transport");
+    if (color_ != ColorInput::ac7NativeScene && color_ != ColorInput::ldrScene) throw std::runtime_error("Scene upload needs scene transport");
     validate(scene, 0);if(guides)for(unsigned i=0;i<2;i++)validate((*guides)[i],i+1);beginUpload(frame);uploadedScene_ = scene;
     active_ = hasFrame_ = true; submitted_ = abandoned_ = false; frame_ = frame;
     deferred_->CopyResource(shared11_[0].Get(), scene);
@@ -110,6 +111,14 @@ uint64_t SharedTextureBridge::completedValue() {
     const auto completed = fence12_->GetCompletedValue();
     if (completed == UINT64_MAX) { healthy_ = false; throw std::runtime_error("Bridge retirement device removal"); }
     return completed;
+}
+void SharedTextureBridge::queueOutputDraw(uint64_t frame,ID3D11CommandList*commands){
+    if(color_!=ColorInput::ldrScene||!healthy_||!active_||!submitted_||abandoned_||frame!=frame_||!commands)throw std::runtime_error("Invalid LDR return transaction");
+    ComPtr<ID3D11Device>owner;commands->GetDevice(&owner);if(owner.Get()!=device11_.Get())throw std::runtime_error("LDR return device mismatch");
+    check(context11_->Wait(fence11_.Get(),value_),"Queue LDR consumer wait");
+    context11_->ExecuteCommandList(commands,TRUE);
+    check(context11_->Signal(fence11_.Get(),++value_),"Signal LDR return retirement");
+    active_=submitted_=false;
 }
 void SharedTextureBridge::queueSceneOutput(uint64_t frame, ID3D11Texture2D* scene, uint32_t left, uint32_t top) {
     if (color_ != ColorInput::ac7NativeScene || !healthy_ || !active_ || !submitted_ || abandoned_ || frame != frame_ ||

@@ -16,7 +16,7 @@ public:
     // Default motion is current-minus-previous NDC in the observed game convention.
     // Caller establishes temporal/jitter semantics and keeps outputs alive through use.
     void record(ID3D11DeviceContext* context, ID3D11Texture2D* depth,
-                ID3D11Texture2D* packedMotion, ViewRect rect, const ClipToPrevious& transform);
+                ID3D11Texture2D* packedMotion, ViewRect rect, const ClipToPrevious& transform,const std::array<float,2>& projectionJitter={});
     ID3D11Texture2D* depth() const { return depth_.Get(); }
     ID3D11Texture2D* motion() const { return motion_.Get(); }
     // 1=camera fallback, 2=object velocity, 3=invalid (cleared depth/motion, not valid history evidence).

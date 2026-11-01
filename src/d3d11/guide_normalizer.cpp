@@ -17,7 +17,7 @@ RWTexture2D<uint2> NormalizedMotion : register(u1);
 RWTexture2D<float2> NormalizedMotion : register(u1);
 #endif
 RWTexture2D<uint> Validity : register(u2);
-cbuffer Parameters : register(b0) { uint4 Rect; float4 Previous0, Previous1, Previous2, Previous3; };
+cbuffer Parameters : register(b0) { uint4 Rect; float4 Previous0, Previous1, Previous2, Previous3; float4 ProjectionJitter; };
 [numthreads(8,8,1)]
 void main(uint3 id : SV_DispatchThreadID) {
     if (id.x >= Rect.z || id.y >= Rect.w) return;
@@ -30,7 +30,7 @@ void main(uint3 id : SV_DispatchThreadID) {
             motion = encoded * 4.008016 - 2.003978;
             valid = 2;
         } else {
-            float2 current = (float2(id.xy) + .5) / float2(Rect.zw) * float2(2,-2) + float2(-1,1);
+            float2 current = (float2(id.xy) + .5) / float2(Rect.zw) * float2(2,-2) + float2(-1,1) - ProjectionJitter.xy;
             float4 previous = current.x * Previous0 + current.y * Previous1 + z * Previous2 + Previous3;
             if (all(isfinite(previous)) && abs(previous.w) > 1e-8) {
                 motion = current - previous.xy / previous.w;
@@ -49,8 +49,8 @@ void main(uint3 id : SV_DispatchThreadID) {
     Validity[id.xy] = valid;
 }
 )";
-struct Constants { ViewRect rect; ClipToPrevious matrix; };
-static_assert(sizeof(Constants) == 80);
+struct Constants { ViewRect rect; ClipToPrevious matrix; std::array<float,4> jitter; };
+static_assert(sizeof(Constants) == 96);
 }
 GuideNormalizer::GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t height, bool modelMotion)
     : width_(width), height_(height), device_(device) {
@@ -77,10 +77,11 @@ GuideNormalizer::GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t 
     }
 }
 void GuideNormalizer::record(ID3D11DeviceContext* context, ID3D11Texture2D* depth,
-                             ID3D11Texture2D* packedMotion, ViewRect rect, const ClipToPrevious& matrix) {
+                             ID3D11Texture2D* packedMotion, ViewRect rect, const ClipToPrevious& matrix,const std::array<float,2>& projectionJitter) {
     if (!context || !depth || !packedMotion || context->GetType() != D3D11_DEVICE_CONTEXT_IMMEDIATE ||
         rect.width != width_ || rect.height != height_) throw std::invalid_argument("Invalid guide context/rect/input");
     for (const auto& row : matrix) for (float v : row) if (!std::isfinite(v)) throw std::invalid_argument("Nonfinite previous-clip transform");
+    for(float v:projectionJitter)if(!std::isfinite(v))throw std::invalid_argument("Nonfinite projection jitter");
     ComPtr<ID3D11Device> actual; context->GetDevice(&actual);
     if (actual.Get() != device_.Get()) throw std::invalid_argument("Guide context device mismatch");
     ID3D11Texture2D* inputs[] = { depth, packedMotion };
@@ -98,7 +99,7 @@ void GuideNormalizer::record(ID3D11DeviceContext* context, ID3D11Texture2D* dept
         check(device_->CreateShaderResourceView(inputs[i], &srv, &inputViews[i]));
     }
     ComPtr<ID3D11DeviceContext1> context1; check(context->QueryInterface(IID_PPV_ARGS(&context1)));
-    Constants constants{rect, matrix}; context->UpdateSubresource(constants_.Get(), 0, nullptr, &constants, 0, 0);
+    Constants constants{rect, matrix,{projectionJitter[0],projectionJitter[1],0,0}}; context->UpdateSubresource(constants_.Get(), 0, nullptr, &constants, 0, 0);
     ComPtr<ID3DDeviceContextState> previous; context1->SwapDeviceContextState(state_.Get(), &previous);
     context->CSSetShader(shader_.Get(), nullptr, 0);
     ID3D11Buffer* cb = constants_.Get(); context->CSSetConstantBuffers(0, 1, &cb);

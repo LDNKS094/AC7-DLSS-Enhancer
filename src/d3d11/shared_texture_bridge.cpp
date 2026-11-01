@@ -78,10 +78,9 @@ void SharedTextureBridge::uploadScene(uint64_t frame, ID3D11Texture2D* scene, co
     if (color_ != ColorInput::ac7NativeScene && color_ != ColorInput::ldrScene) throw std::runtime_error("Scene upload needs scene transport");
     validate(scene, 0);if(guides)for(unsigned i=0;i<2;i++)validate((*guides)[i],i+1);beginUpload(frame);uploadedScene_ = scene;
     active_ = hasFrame_ = true; submitted_ = abandoned_ = false; frame_ = frame;
-    deferred_->CopyResource(shared11_[0].Get(), scene);
-    if(guides)for(unsigned i=0;i<2;i++)deferred_->CopyResource(shared11_[i+1].Get(),(*guides)[i]);
-    ComPtr<ID3D11CommandList>commands;check(deferred_->FinishCommandList(FALSE,&commands),"Finish scene input");
-    context11_->ExecuteCommandList(commands.Get(),TRUE);
+    // Copies preserve pipeline bindings; no private command list is needed here.
+    context11_->CopyResource(shared11_[0].Get(), scene);
+    if(guides)for(unsigned i=0;i<2;i++)context11_->CopyResource(shared11_[i+1].Get(),(*guides)[i]);
     check(context11_->Signal(fence11_.Get(), ++value_));
     // Submit the producer before the other API waits on it.
     context11_->Flush();

@@ -19,15 +19,15 @@ public:
                 ID3D11Texture2D* packedMotion, ViewRect rect, const ClipToPrevious& transform,const std::array<float,2>& projectionJitter={});
     ID3D11Texture2D* depth() const { return depth_.Get(); }
     ID3D11Texture2D* motion() const { return motion_.Get(); }
-    // 1=camera fallback, 2=object velocity, 3=invalid (cleared depth/motion, not valid history evidence).
-    ID3D11Texture2D* validity() const { return validity_.Get(); }
 private:
     uint32_t width_, height_;
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3DDeviceContextState> state_;
     Microsoft::WRL::ComPtr<ID3D11ComputeShader> shader_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> constants_;
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> depth_, motion_, validity_;
-    std::array<Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView>, 3> views_;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> depth_, motion_;
+    std::array<Microsoft::WRL::ComPtr<ID3D11Texture2D>, 2> inputs_;
+    std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>, 2> inputViews_;
+    std::array<Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView>, 2> views_;
 };
 }

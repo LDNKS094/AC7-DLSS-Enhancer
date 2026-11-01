@@ -1,6 +1,6 @@
 # AC7 Native Adapter
 
-总体目标为 AC7 原生 Pre-SR NR、SR、FG 及超宽屏 NR 适配。**NR／SR 及可调周边压缩完成当前阶段**：用户在最新 [nr-config ASI](development/build/nr-config/development/Release/AC7NativeModels.asi) 实机测试后反馈未发现明显问题。当前版本作为继续推进的基线，保留独立开关，SkinStructure 公开配置已移除；下一步进入 [FG 接入设计](development/docs/ROUTES.md)，尚未实现 FG。RCAS 仍可选，默认关闭，是否移除尚未决定。
+总体目标为 AC7 原生 Pre-SR NR、SR、FG 及超宽屏 NR 适配。NR／SR／可调周边压缩的实机基线为 `f918479`／nr-config，用户反馈未发现明显问题。当前 [runtime-opt 候选](development/build/runtime-opt/development/Release/AC7NativeModels.asi) 在清理旧验证／失败回退后，进一步收敛常量复制、SRV 重建、无消费者 validity 输出、共享复制包装和 RCAS-only 无效工作；意外运行错误记录 fatal 后直接终止。已构建、未实机，收益未测。下一阶段选择 NVIDIA 官方 DLSSG，OptiScaler 仅作必要部分参考，FG 尚未实现。
 
 此前 SR 基线 `762cfa8`／`hud-lifetime` 和独立开关留档 `e326737` 均保留。菜单／Logo／HUD 缩小问题已结案；原生交接前保留同帧 UI 资源身份供图调度使用。一次性 D3D11 截帧分支已移除，捕获和历史二进制保留。当前实机结论不扩大为所有关卡／配置已覆盖或性能收益已测得。
 
@@ -10,7 +10,7 @@
 
 ## 使用
 
-本次候选：[AC7NativeModels.asi](development/build/nr-config/development/Release/AC7NativeModels.asi)。完全退出游戏后由用户替换原加载位置的本项目 ASI，只加载一份。沿用 ASI 旁的 INI、模型目录与 DLL，保留宽屏、dinput8、UE4SS 和其它模组。
+本次候选：[AC7NativeModels.asi](development/build/runtime-opt/development/Release/AC7NativeModels.asi)。完全退出游戏后由用户替换原加载位置的本项目 ASI，只加载一份。沿用 ASI 旁的 INI、模型目录与 DLL，保留宽屏、dinput8、UE4SS 和其它模组。
 
 ```ini
 [SR]
@@ -43,8 +43,8 @@ SR 也可将已有 `[SR]` 节的 Enabled 改成 0／1 后按 Ctrl+Shift+F11 实�
 | 游戏前台快捷键 | 功能 |
 |---|---|
 | Ctrl+Shift+F10 | 整模组开关；在途帧自然完成，后续保持原生 |
-| Ctrl+Shift+F11 | 重载配置；改 SR 档位才使模型历史失效 |
-| Ctrl+Shift+F12 | 保存下一成功 HDR SR 的输入／输出预览与元数据 |
+| Ctrl+Shift+F11 | 重载配置；SR 状态／档位和有效 NR 参数变化按条件重置历史 |
+| Ctrl+Shift+F12 | 保存下一成功效果帧的 HDR 输入／输出预览与元数据 |
 
 日志 `resolutionReady=1` 仅表示入口安装；`sr-scene sr=1 stage=temporal-graph` 才表示实际 SR 提交。SR 关闭时为 `scene-frame sr=0`，只累计 processedFrames，不累计 srFrames。资源或模型错误记录为 `scene-error` 并停止后续准入，空间输出不会记作 SR。D3D 设备或 View 常量上传失效属于当前帧不可恢复错误。
 

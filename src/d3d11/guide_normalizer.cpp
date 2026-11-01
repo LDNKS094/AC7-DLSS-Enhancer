@@ -16,7 +16,6 @@ RWTexture2D<uint2> NormalizedMotion : register(u1);
 #else
 RWTexture2D<float2> NormalizedMotion : register(u1);
 #endif
-RWTexture2D<uint> Validity : register(u2);
 cbuffer Parameters : register(b0) { uint4 Rect; float4 Previous0, Previous1, Previous2, Previous3; float4 ProjectionJitter; };
 [numthreads(8,8,1)]
 void main(uint3 id : SV_DispatchThreadID) {
@@ -46,7 +45,6 @@ void main(uint3 id : SV_DispatchThreadID) {
 #else
     NormalizedMotion[id.xy] = valid == 3 ? float2(0,0) : motion;
 #endif
-    Validity[id.xy] = valid;
 }
 )";
 struct Constants { ViewRect rect; ClipToPrevious matrix; std::array<float,4> jitter; };
@@ -66,9 +64,9 @@ GuideNormalizer::GuideNormalizer(ID3D11Device* device, uint32_t width, uint32_t 
     check(device->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &shader_));
     D3D11_BUFFER_DESC buffer{}; buffer.ByteWidth = sizeof(Constants); buffer.Usage = D3D11_USAGE_DEFAULT; buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     check(device->CreateBuffer(&buffer, nullptr, &constants_));
-    ComPtr<ID3D11Texture2D>* textures[] = { &depth_, &motion_, &validity_ };
-    const DXGI_FORMAT formats[] = { DXGI_FORMAT_R32_FLOAT, modelMotion?DXGI_FORMAT_R16G16_TYPELESS:DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32_UINT };
-    for (unsigned i = 0; i < 3; i++) {
+    ComPtr<ID3D11Texture2D>* textures[] = { &depth_, &motion_ };
+    const DXGI_FORMAT formats[] = { DXGI_FORMAT_R32_FLOAT, modelMotion?DXGI_FORMAT_R16G16_TYPELESS:DXGI_FORMAT_R32G32_FLOAT };
+    for (unsigned i = 0; i < 2; i++) {
         D3D11_TEXTURE2D_DESC d{}; d.Width = width; d.Height = height; d.MipLevels = d.ArraySize = 1; d.SampleDesc.Count = 1;
         d.Format = formats[i]; d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
         check(device->CreateTexture2D(&d, nullptr, textures[i]->GetAddressOf()));
@@ -86,10 +84,9 @@ void GuideNormalizer::record(ID3D11DeviceContext* context, ID3D11Texture2D* dept
     if (actual.Get() != device_.Get()) throw std::invalid_argument("Guide context device mismatch");
     ID3D11Texture2D* inputs[] = { depth, packedMotion };
     const DXGI_FORMAT formats[] = { DXGI_FORMAT_R32G8X24_TYPELESS, DXGI_FORMAT_R16G16_UNORM };
-    std::array<ComPtr<ID3D11ShaderResourceView>, 2> inputViews;
     for (unsigned i = 0; i < 2; i++) {
         // D3D11 null SRV reads zero: absent native velocity uses the existing real camera transform fallback.
-        if(i==1&&!inputs[i])continue;
+        if(i==1&&!inputs[i]){inputs_[i].Reset();inputViews_[i].Reset();continue;}
         actual.Reset(); inputs[i]->GetDevice(&actual);
         if (actual.Get() != device_.Get()) throw std::invalid_argument("Guide resource device mismatch");
         D3D11_TEXTURE2D_DESC d; inputs[i]->GetDesc(&d);
@@ -98,15 +95,18 @@ void GuideNormalizer::record(ID3D11DeviceContext* context, ID3D11Texture2D* dept
             rect.x > d.Width - rect.width || rect.y > d.Height - rect.height) throw std::invalid_argument("Unsupported guide input layout/region");
         D3D11_SHADER_RESOURCE_VIEW_DESC srv{}; srv.Format = i ? formats[i] : DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
         srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; srv.Texture2D.MipLevels = 1;
-        check(device_->CreateShaderResourceView(inputs[i], &srv, &inputViews[i]));
+        if(inputs_[i].Get()!=inputs[i]){
+            ComPtr<ID3D11ShaderResourceView>next;check(device_->CreateShaderResourceView(inputs[i], &srv, &next));
+            inputViews_[i]=std::move(next);inputs_[i]=inputs[i];
+        }
     }
     ComPtr<ID3D11DeviceContext1> context1; check(context->QueryInterface(IID_PPV_ARGS(&context1)));
     Constants constants{rect, matrix,{projectionJitter[0],projectionJitter[1],0,0}}; context->UpdateSubresource(constants_.Get(), 0, nullptr, &constants, 0, 0);
     ComPtr<ID3DDeviceContextState> previous; context1->SwapDeviceContextState(state_.Get(), &previous);
     context->CSSetShader(shader_.Get(), nullptr, 0);
     ID3D11Buffer* cb = constants_.Get(); context->CSSetConstantBuffers(0, 1, &cb);
-    ID3D11ShaderResourceView* srvs[] = { inputViews[0].Get(), inputViews[1].Get() }; context->CSSetShaderResources(0, 2, srvs);
-    ID3D11UnorderedAccessView* uavs[] = { views_[0].Get(), views_[1].Get(), views_[2].Get() }; context->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
+    ID3D11ShaderResourceView* srvs[] = { inputViews_[0].Get(), inputViews_[1].Get() }; context->CSSetShaderResources(0, 2, srvs);
+    ID3D11UnorderedAccessView* uavs[] = { views_[0].Get(), views_[1].Get() }; context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
     context->Dispatch((width_ + 7) / 8, (height_ + 7) / 8, 1);
     // No throwing calls between state swaps. Context state owns the private bindings.
     context1->SwapDeviceContextState(previous.Get(), nullptr);

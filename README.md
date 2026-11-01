@@ -1,12 +1,12 @@
 # AC7 Native Adapter
 
-当前候选已改为**统一View接管、早期HDR DLSS SR**：确认该View的GPU资源与回退准备完成后，才缩小渲染rect、加入真实jitter；在不透明场景结束、透明/Distortion之前重建，后续使用高分、去jitter的View。未接管的View不受本模组缩放/jitter影响。旧末端LDR Draw匹配与颜色流hook已移除。
+当前候选将 HDR DLSS SR 接入原生后处理图的时序逻辑位置：低分几何、透明与 Distortion 先按原生网格完成；图调度落实颜色输入后执行 SR，再由高分颜色链继续处理。深度、stencil、GBuffer 与低分运动 tile 不再整体放大。
 
-这次针对“jitter已放行、SR入口却不放行”的控制缺口落地实现，**尚未由用户实机确认菜单、机库抖动是否消失**。NR与RCAS暂时完全旁路，配置保留。模组不读写游戏AA字段，FXAA仍由用户手动关闭；jitter序列和其它画质参数未调。
+这是一次流程重整，尚未由用户实机确认。NR、RCAS 继续旁路；不调整 jitter 序列、mip 或其它画质参数，不读写游戏 AA 字段，FXAA 仍由用户手动关闭。
 
 ## 使用
 
-沿用ASI旁的`AC7NativeModels.ini`与`AC7NativeModels/`模型目录，仅替换ASI。只加载一个本项目ASI，保留宽屏、dinput8、UE4SS及其它模组。部署、游戏启动与设置由用户操作。
+本次 ASI：[AC7NativeModels.asi](development/build/temporal-graph/development/Release/AC7NativeModels.asi)。完全退出游戏后由用户替换原加载位置的本项目 ASI，只加载一份。沿用 ASI 旁的 INI、模型目录与 DLL，保留宽屏、dinput8、UE4SS 和其它模组。
 
 ```ini
 [SR]
@@ -20,27 +20,26 @@ Sharpness=0.4
 | 1 — Balanced | 58% |
 | 2 — Performance | 50% |
 
-`Sharpness`当前不生效，值保留供之后恢复；NR参数同样保留。实际输入/输出尺寸决定NGX模式。
+Sharpness 与 NR 参数保留读取，本版不执行锐化或 NR。
 
 | 游戏前台快捷键 | 功能 |
 |---|---|
-| Ctrl+Shift+F10 | 整模组开关；在途帧自然完成，后续View恢复原生 |
-| Ctrl+Shift+F11 | 重载SR档位与保留的NR/锐化配置 |
-| Ctrl+Shift+F12 | 保存下一成功HDR SR的前后PNG与元数据 |
+| Ctrl+Shift+F10 | 整模组开关；在途帧自然完成，后续保持原生 |
+| Ctrl+Shift+F11 | 重载配置；改 SR 档位才使模型历史失效 |
+| Ctrl+Shift+F12 | 保存下一成功 HDR SR 的输入／输出预览与元数据 |
 
-日志`resolutionReady=1`表示统一入口hook已安装；`sr-scene stage=before-translucency`表示实际早期SR提交。`scene-error`表示具体失败并停止后续准入，回退不会伪记为SR。正常运行不逐帧读回。
+日志 `resolutionReady=1` 仅表示入口安装；`sr-scene stage=temporal-graph` 才表示实际 SR 提交。资源或模型错误记录为 `scene-error` 并停止后续准入，空间输出不会记作 SR。D3D 设备或 View 常量上传失效属于当前帧不可恢复错误。
 
-[状态与限制](development/docs/STATUS.md) · [游戏操作](development/docs/GAME-RUNBOOK.md) · [数据契约](development/docs/DATA-CONTRACT.md) · [执行路线](development/docs/ROUTES.md)
+[状态与限制](development/docs/STATUS.md) · [游戏操作](development/docs/GAME-RUNBOOK.md) · [数据契约](development/docs/DATA-CONTRACT.md) · [执行路线](development/docs/ROUTES.md) · [逻辑计划](development/docs/SR-LOGIC-PLAN.md) · [问题记录](development/docs/PROBLEM-RECORD.md)
 
 ## 构建
 
-本机SDK、模型与MinHook路径已配置时：
+本机 `development/build/temporal-graph` 已配置：
 
 ```text
-cmake -S . -B development/build/current -DAC7_BUILD_DEVELOPMENT=ON
-cmake --build development/build/current --config Release --target ac7-native-models --parallel 4
+cmake --build development/build/temporal-graph --config Release --target ac7-native-models --parallel 4
 ```
 
-新机器配置`AC7_MINHOOK_SOURCE_DIR`、`NGX_INCLUDE_DIR`与`NGX_LOADER_LIBRARY`；MSVC的MASM编译实际场景边界入口。输出`development/build/current/development/Release/AC7NativeModels.asi`。
+新配置需提供 AC7_BUILD_DEVELOPMENT、AC7_MINHOOK_SOURCE_DIR、NGX_INCLUDE_DIR、NGX_LOADER_LIBRARY。MSVC/MASM 构建原生边界，Windows SDK 的 FXC 将局部颜色 shader 编译并嵌入 ASI；可用 AC7_FXC_EXECUTABLE 指定已有工具路径。
 
-当前原生场景纹理保留完整allocation，比旧低分allocation使用更多显存；本轮未测游戏性能。GPU桥保留producer Flush、跨API fence、三槽allocator保护与尺寸退休；不支持运行中卸载。核心库在`src/`，ASI在`development/src/`和`development/tools/neutral-asi/`。旧候选、原始捕获与日志、SDK/模型依赖保留。
+旧源码留档为 `ea213fb`；对应当时 ASI 保存在 `development/artifacts/research/sr-state-ea213fb/`，旧 current 二进制也未覆盖。原始捕获、日志、INCOMPLETE、SDK 与模型均保留。本轮只构建交付二进制，不运行测试宿主、不自动部署或启动游戏；游戏性能和新流程实机结果待用户确认。

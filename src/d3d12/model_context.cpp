@@ -1,34 +1,55 @@
 #include "model_context.h"
+#include "streamline_session.h"
 #include <dxgi1_2.h>
 #include <nvsdk_ngx.h>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <exception>
+#include <memory>
+#include <vector>
 
 namespace ac7 {
 using Microsoft::WRL::ComPtr;
 namespace {
 void check(HRESULT hr,const char*stage){if(FAILED(hr))throw std::runtime_error(std::string(stage)+" HRESULT "+std::to_string(unsigned(hr)));}
-std::filesystem::path modelDirectory(){
+}
+std::filesystem::path modelRuntimeDirectory(){
     HMODULE module=nullptr;
-    check(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&modelDirectory),&module)?S_OK:HRESULT_FROM_WIN32(GetLastError()),"Model module");
+    check(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&modelRuntimeDirectory),&module)?S_OK:HRESULT_FROM_WIN32(GetLastError()),"Model module");
     wchar_t path[32768];const auto n=GetModuleFileNameW(module,path,32768);
     if(!n||n>=32768)throw std::runtime_error("Native model module path unavailable");
     return std::filesystem::path(path).parent_path()/L"AC7NativeModels";
 }
-}
 ModelContext::ModelContext(ID3D11Device*source):source_(source){
     if(!source)throw std::invalid_argument("Missing model context D3D11 device");
-    ComPtr<IDXGIDevice>dxgi;check(source->QueryInterface(IID_PPV_ARGS(&dxgi)),"Model context DXGI device");
+}
+ModelContext& ModelContext::acquire(ID3D11Device*source){
+    struct Owners {std::mutex lock;std::vector<std::unique_ptr<ModelContext>>contexts;};
+    static auto&owners=*new Owners;
+    std::lock_guard<std::mutex>guard(owners.lock);
+    for(const auto&context:owners.contexts)if(context->sourceDevice()==source)return *context;
+    auto context=std::unique_ptr<ModelContext>(new ModelContext(source));
+    owners.contexts.push_back(std::move(context));return *owners.contexts.back();
+}
+void ModelContext::initializeDevice(){
+    std::lock_guard<std::mutex>guard(initializationLock_);
+    if(device_)return;
+    ComPtr<IDXGIDevice>dxgi;check(source_->QueryInterface(IID_PPV_ARGS(&dxgi)),"Model context DXGI device");
     ComPtr<IDXGIAdapter>adapter;check(dxgi->GetAdapter(&adapter),"Model context adapter");
-    check(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&device_)),"Model context D3D12 device");
+    ComPtr<ID3D12Device>device;ComPtr<ID3D12CommandQueue>queue;
+    check(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&device)),"Model context D3D12 device");
     D3D12_COMMAND_QUEUE_DESC desc{};desc.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;
-    check(device_->CreateCommandQueue(&desc,IID_PPV_ARGS(&queue_)),"Model context DIRECT queue");
+    const auto proxy=bindStreamlineDevice(device.Get());
+    check(proxy->CreateCommandQueue(&desc,IID_PPV_ARGS(&queue)),"Model context DIRECT queue");
+    auto native=nativeStreamlineQueue(queue.Get());
+    device_=std::move(device);queue_=std::move(native);presentationQueue_=std::move(queue);
 }
 void ModelContext::initializeNgx(){
+    initializeDevice();
+    std::lock_guard<std::mutex>guard(initializationLock_);
     if(ngxInitialized_)return;
-    const auto directory=modelDirectory();const auto cache=directory/(L"cache-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64()));
+    const auto directory=modelRuntimeDirectory();const auto cache=directory/L"cache";
     std::filesystem::create_directories(cache);
     const wchar_t*paths[]={directory.c_str()};NVSDK_NGX_FeatureCommonInfo common{};common.PathListInfo={paths,1};
     const auto result=NVSDK_NGX_D3D12_Init_with_ProjectID("05882ed0-d4cd-4063-a726-0b4862bad3dc",NVSDK_NGX_ENGINE_TYPE_CUSTOM,"AC7 native NR HDR SR",cache.c_str(),device_.Get(),&common);

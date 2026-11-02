@@ -2,7 +2,7 @@
 
 目标是 AC7 原生 HDR NR／SR、超宽屏 NR 周边减负和 NVIDIA 官方 DLSSG 接入。NR／SR／周边压缩已有用户实机反馈；FG 尚未接通。
 
-最新 [ASI](development/artifacts/releases/gpu-context-simple/AC7NativeModels.asi) 已从整理后的稳定依赖重新构建，未实机。它包含统一设备／队列与设备期 NGX 会话、运行链优化及意外错误 FailFast；没有固定 FG 倍率或独立 RCAS 专用分支。本次留档包含上下文实现与目录整理，前序运行链优化基线为 `961ec1a`。
+统一上下文与目录整理已提交为 `aa796fe`。HUDless已有用户关卡反馈；相机常量、guides及同帧token也有启动提交日志。最新 [native-reflex-phases候选](development/artifacts/releases/native-reflex-phases/AC7NativeModels.asi) 本次主菜单启动日志确认同一真实帧的模拟／RHI提交／Present六阶段标记均被SDK接受，SR／NR持续运行，无fatal。低延迟模式Off、FG关闭；尚无关卡反馈或延迟收益测量。SDK内部消费者完成点、独立FG取数及能力驱动倍率仍未接通。本轮代码未提交，旧候选保留，不改变画质参数。
 
 ## 目录与文档
 
@@ -29,7 +29,7 @@ cmake --build development/build/current --config Release --target ac7-native-mod
 
 生成 `development/build/current/development/Release/AC7NativeModels.asi`。需要保留交付时另存至 `development/artifacts/releases`；清理 build 不会删除现有交付候选或 SDK。外部依赖覆盖参数仍为 `AC7_MINHOOK_SOURCE_DIR`、`NGX_INCLUDE_DIR`、`NGX_LOADER_LIBRARY`。
 
-由用户退出游戏后替换本项目 ASI，只加载一份；保留其它模组及游戏设置。ASI 旁使用 `AC7NativeModels.ini` 和 `AC7NativeModels/` 模型目录，模型原件在 `third_party/models/`。助手不部署或启动游戏。
+由用户退出游戏后替换本项目 ASI，只加载一份；保留其它模组及游戏设置。ASI 旁使用 `AC7NativeModels.ini` 和 `AC7NativeModels/` 模型目录，模型原件在 `third_party/models/`。presentation-bridge另需将交付目录内 `AC7NativeModels/` 的6个官方运行库合入游戏同名目录，保留原SR／NR模型。缺库或签名无效会明确报错终止。助手不部署或启动游戏。
 
 ```ini
 [SR]

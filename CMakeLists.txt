@@ -24,7 +24,7 @@ target_compile_definitions(ac7_hdr12 PRIVATE "AC7_HDR_SHADER_PATH=L\"${CMAKE_CUR
 target_include_directories(ac7_hdr12 PUBLIC src/d3d12)
 target_link_libraries(ac7_hdr12 PUBLIC d3d12 d3dcompiler)
 
-add_library(ac7_shared_bridge STATIC src/d3d11/shared_texture_bridge.cpp)
+add_library(ac7_shared_bridge STATIC src/d3d11/shared_texture_bridge.cpp src/d3d11/guide_snapshot_pool.cpp)
 target_compile_features(ac7_shared_bridge PUBLIC cxx_std_17)
 target_compile_definitions(ac7_shared_bridge PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 target_include_directories(ac7_shared_bridge PUBLIC src/d3d11)

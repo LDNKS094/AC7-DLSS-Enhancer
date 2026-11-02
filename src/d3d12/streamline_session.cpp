@@ -10,6 +10,9 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace ac7 {
 namespace {
@@ -35,8 +38,10 @@ struct Session {
     sl::DLSSGMode generationMode=sl::DLSSGMode::eOff;
     sl::DLSSGOptions appliedOptions{};
     FgSettings requested{};
+    bool gameAllowsGeneration=false;
     unsigned maxGeneratedFrames=0,minDimension=0;
-    bool mayHaveGenerationResources=false,generatedReported=false,lowLatencyAvailable=false,refreshReflex=false;
+    bool mayHaveGenerationResources=false,generatedReported=false,lowLatencyAvailable=false,refreshReflex=false,dynamicSupported=false;
+    uint32_t reflexFrameLimitUs=0;
     std::string generationStatus;
     PFun_slReflexSleep*sleep=nullptr;
     PFun_slReflexSetOptions*reflexOptions=nullptr;
@@ -98,9 +103,9 @@ void generationStatus(const std::string&message){
 bool applyGenerationOptions(const sl::DLSSGOptions&options){
     const auto&a=session.appliedOptions;
     if(std::tie(a.mode,a.numFramesToGenerate,a.flags,a.queueParallelismMode,a.numBackBuffers,a.mvecDepthWidth,a.mvecDepthHeight,a.colorWidth,a.colorHeight,a.colorBufferFormat,
-        a.mvecBufferFormat,a.depthBufferFormat,a.hudLessBufferFormat)==
+        a.mvecBufferFormat,a.depthBufferFormat,a.hudLessBufferFormat,a.dynamicTargetFrameRate)==
         std::tie(options.mode,options.numFramesToGenerate,options.flags,options.queueParallelismMode,options.numBackBuffers,options.mvecDepthWidth,options.mvecDepthHeight,options.colorWidth,options.colorHeight,options.colorBufferFormat,
-        options.mvecBufferFormat,options.depthBufferFormat,options.hudLessBufferFormat))return false;
+        options.mvecBufferFormat,options.depthBufferFormat,options.hudLessBufferFormat,options.dynamicTargetFrameRate))return false;
     if(!session.dlssgOptions){if(options.mode!=sl::DLSSGMode::eOff)throw std::runtime_error("DLSSG options unavailable");return false;}
     check(session.dlssgOptions(sl::ViewportHandle(0),options),"Apply real-present DLSSG options");
     session.appliedOptions=options;session.generationMode=options.mode;
@@ -112,22 +117,26 @@ bool configureGeneration(const PresentationFrame*frame,const ScenePresentation*s
     const bool requested=session.requested.enabled;
     const char*reason=nullptr;
     if(!requested)reason="disabled by request";
+    else if(session.requested.multiplier==1)reason="1x requested; no frame generation";
     else if(!session.dlssgOptions)reason="DLSSG unsupported on this system";
     else if(!session.lowLatencyAvailable||!session.sleep||!session.marker)reason="Reflex low-latency support unavailable";
     else if(!frame||!frame->fg.enabled)reason="no matching enabled native simulation frame";
+    else if(!session.gameAllowsGeneration||!frame->allowsGeneration)reason="native game state disallows generation";
     else if(!scene)reason="no compatible same-frame scene inputs";
     else if(session.reflexMode==sl::ReflexMode::eOff)reason="matching Reflex low-latency phase has not started";
     else if(!session.maxGeneratedFrames)reason="SDK generation capability unavailable";
     else if(region.width<session.minDimension||region.height<session.minDimension)reason="scene output region below SDK minimum";
     if(!reason){
-        options.numFramesToGenerate=frame->fg.multiplier?frame->fg.multiplier-1:options.numFramesToGenerate;
-        if(options.numFramesToGenerate>session.maxGeneratedFrames){
-            generationStatus("FG off: requested multiplier "+std::to_string(uint64_t(options.numFramesToGenerate)+1)+
-                " exceeds SDK maximum "+std::to_string(uint64_t(session.maxGeneratedFrames)+1));
-            reason="unsupported multiplier";
-        }else options.mode=sl::DLSSGMode::eOn;
+        if(frame->fg.multiplier==1)reason="matching native frame requested 1x";
+        else if(!frame->fg.multiplier&&session.dynamicSupported){
+            if(!frame->gameFpsLimitKnown)reason="native game FPS target unavailable";
+            else {options.mode=sl::DLSSGMode::eDynamic;options.dynamicTargetFrameRate=frame->gameFpsLimit;}
+        }else{
+            const unsigned wanted=frame->fg.multiplier?frame->fg.multiplier-1:session.maxGeneratedFrames;
+            options.numFramesToGenerate=std::min(wanted,session.maxGeneratedFrames);options.mode=sl::DLSSGMode::eOn;
+        }
     }
-    if(options.mode==sl::DLSSGMode::eOn){
+    if(options.mode!=sl::DLSSGMode::eOff){
         options.flags=sl::DLSSGFlags::eRetainResourcesWhenOff;
         options.queueParallelismMode=sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
         options.numBackBuffers=backbuffers;options.colorWidth=UINT(color.Width);options.colorHeight=color.Height;
@@ -139,20 +148,34 @@ bool configureGeneration(const PresentationFrame*frame,const ScenePresentation*s
         if(session.mayHaveGenerationResources)options.flags=sl::DLSSGFlags::eRetainResourcesWhenOff;
     }
     const bool reset=applyGenerationOptions(options);
-    if(options.mode==sl::DLSSGMode::eOn)generationStatus("FG enabled: requested multiplier "+std::to_string(uint64_t(options.numFramesToGenerate)+1)+
-        ", SDK maximum "+std::to_string(uint64_t(session.maxGeneratedFrames)+1));
-    else if(!reason||std::strcmp(reason,"unsupported multiplier"))generationStatus(std::string("FG off: ")+(reason?reason:"no request"));
+    if(options.mode==sl::DLSSGMode::eDynamic)generationStatus(frame->gameFpsLimit>0?
+        "FG enabled: Auto, game FPS target "+std::to_string(frame->gameFpsLimit):"FG enabled: Auto, display refresh target");
+    else if(options.mode==sl::DLSSGMode::eOn)generationStatus("FG enabled: requested "+
+        (frame->fg.multiplier?std::to_string(frame->fg.multiplier):std::string("Auto (dynamic unsupported)"))+
+        ", actual fixed multiplier "+std::to_string(uint64_t(options.numFramesToGenerate)+1)+
+        ", SDK maximum "+std::to_string(uint64_t(session.maxGeneratedFrames)+1)+"; native game FPS cap retained");
+    else generationStatus(std::string("FG off: ")+(reason?reason:"no request"));
     return reset;
 }
 }
-void requestStreamlineFg(const FgSettings&settings){
-    if(settings.multiplier==1)throw std::invalid_argument("FG multiplier must be zero or at least two");
+FgSettings requestStreamlineFg(const FgSettings&settings){
     std::lock_guard<std::mutex>guard(session.lock);
-    if(settings.enabled&&!session.requested.enabled)session.refreshReflex=true;
-    session.requested=settings;
+    auto next=settings;
+    if(next.enabled&&session.device&&!session.dlssgOptions){
+        next.enabled=false;generationStatus("FG unavailable on this system; request disabled");
+    }
+    if(next.enabled&&!session.requested.enabled)session.refreshReflex=true;
+    session.requested=next;return next;
+}
+void recordStreamlineGameState(const PresentationFrame&frame,float limit,bool allowsGeneration){
+    if(!std::isfinite(limit))throw std::runtime_error("Nonfinite native game FPS limit");
+    std::lock_guard<std::mutex>guard(session.lock);
+    frame.gameFpsLimit=std::max(0.f,limit);
+    frame.gameFpsLimitKnown=true;
+    session.gameAllowsGeneration=frame.allowsGeneration=allowsGeneration;
 }
 bool streamlineGenerationNeedsRelease(){
-    std::lock_guard<std::mutex>guard(session.lock);return !session.requested.enabled&&session.mayHaveGenerationResources;
+    std::lock_guard<std::mutex>guard(session.lock);return (!session.requested.enabled||session.requested.multiplier==1)&&session.mayHaveGenerationResources;
 }
 void suspendStreamlineGeneration(){
     std::lock_guard<std::mutex>guard(session.lock);
@@ -251,7 +274,7 @@ ComPtr<ID3D12Device>bindStreamlineDevice(ID3D12Device*device){
     }else if(session.log)session.log(1,"Reflex unsupported; low-latency sleep unavailable");
     if(session.log&&session.marker)session.log(0,session.sleep?"Native Reflex phases ready; low-latency mode off":"Native PCL phases ready; Reflex sleep unsupported");
     if(session.log)session.log(0,loaded?"D3D12 device bound; DLSSG plugin loaded, generation disabled":"D3D12 device bound; DLSSG plugin unavailable, generation disabled");
-    session.device=device;session.proxy=proxy;return proxy;
+    session.device=device;session.proxy=proxy;if(!loaded)session.requested.enabled=false;return proxy;
 }
 ComPtr<ID3D12CommandQueue>nativeStreamlineQueue(ID3D12CommandQueue*queue){
     std::lock_guard<std::mutex>guard(session.lock);
@@ -280,10 +303,17 @@ void sleepStreamlineFrame(const PresentationFrame&frame){
             sl::ReflexState state{};check(session.reflexState(state),"Query Reflex availability for FG request");
             session.lowLatencyAvailable=state.lowLatencyAvailable;session.refreshReflex=false;
         }
-        const auto mode=session.lowLatencyAvailable&&session.dlssgOptions&&(frame.fg.enabled||session.generationMode!=sl::DLSSGMode::eOff)?sl::ReflexMode::eLowLatency:sl::ReflexMode::eOff;
-        if(session.reflexOptions&&mode!=session.reflexMode){
-            sl::ReflexOptions options{};options.mode=mode;
-            check(session.reflexOptions(options),"Apply native-frame Reflex mode");session.reflexMode=mode;
+        const bool requested=frame.fg.enabled&&frame.fg.multiplier!=1&&frame.allowsGeneration;
+        const auto mode=session.lowLatencyAvailable&&session.dlssgOptions&&(requested||session.generationMode!=sl::DLSSGMode::eOff)?sl::ReflexMode::eLowLatency:sl::ReflexMode::eOff;
+        uint32_t limitUs=0;
+        if(mode!=sl::ReflexMode::eOff&&requested&&!frame.fg.multiplier&&session.dynamicSupported&&frame.gameFpsLimitKnown&&frame.gameFpsLimit>0){
+            const double interval=std::max(1.,std::round(1e6/double(frame.gameFpsLimit)));
+            if(interval>std::numeric_limits<uint32_t>::max())throw std::runtime_error("Native FPS target cannot be represented by Reflex");
+            limitUs=uint32_t(interval);
+        }
+        if(session.reflexOptions&&(mode!=session.reflexMode||limitUs!=session.reflexFrameLimitUs)){
+            sl::ReflexOptions options{};options.mode=mode;options.frameLimitUs=limitUs;
+            check(session.reflexOptions(options),"Apply native-frame Reflex mode");session.reflexMode=mode;session.reflexFrameLimitUs=limitUs;
         }
         sleep=session.sleep;}
     // The preceding frame must be able to submit/Present while this driver call waits.
@@ -379,6 +409,7 @@ StreamlineInputCompletion finishStreamlinePresent(){
     // A null options pointer queries current state without estimating VRAM each frame.
     check(session.dlssgState(sl::ViewportHandle(0),state,nullptr),"Get last-present DLSSG input completion");
     session.maxGeneratedFrames=state.numFramesToGenerateMax;session.minDimension=state.minWidthOrHeight;
+    session.dynamicSupported=state.bIsDynamicMFGSupported==sl::Boolean::eTrue;
     if(session.generationMode!=sl::DLSSGMode::eOff){
         if(state.status!=sl::DLSSGStatus::eOk)throw std::runtime_error("DLSSG runtime status "+std::to_string(unsigned(state.status)));
         if(state.numFramesActuallyPresented>1&&!session.generatedReported){

@@ -22,7 +22,8 @@ struct ScenePresentation {
 };
 // Process-pinned, like ModelContext; never shut down from DllMain or a layout destructor.
 void initializeStreamline(void(*log)(unsigned,const char*)noexcept);
-void requestStreamlineFg(const FgSettings&);
+FgSettings requestStreamlineFg(const FgSettings&);
+void recordStreamlineGameState(const PresentationFrame&,float limit,bool allowsGeneration);
 bool streamlineGenerationNeedsRelease();
 void suspendStreamlineGeneration();
 void releaseStreamlineGenerationResources();

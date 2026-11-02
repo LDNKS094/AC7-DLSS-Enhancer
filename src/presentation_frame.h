@@ -9,6 +9,9 @@ struct PresentationFrame {
     sl::FrameToken*sdkToken;
     bool pcl=false;
     FgSettings fg{};
+    mutable float gameFpsLimit=0;
+    mutable bool gameFpsLimitKnown=false;
+    mutable bool allowsGeneration=false;
     // Session mutex protects marker ordering across simulation and RHI threads.
     mutable unsigned markers=0;
 };

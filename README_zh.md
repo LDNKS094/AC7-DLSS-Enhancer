@@ -22,9 +22,7 @@ NR 的计算量随输入像素增长，因此除 SR 降低基础渲染分辨率�
 | [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases)（x64） | 加载 ASI 模组，需单独安装 |
 | NVIDIA DLSS SR／NR 模型 | 随包提供，遵循 NVIDIA SDK 许可证 |
 | NVIDIA Streamline 运行库 | 随包提供，遵循原许可证及第三方许可声明 |
-| NVIDIA DLSS FG 运行库 | 需自行从官方 Streamline SDK 2.14.16 获取 |
-
-安装前，从 [Streamline SDK 2.14.16](https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.16) 的 `bin/x64/nvngx_dlssg.dll` 取得正式运行库，放入解压后的安装包 `payload/AC7DLSS/`，再执行下方安装步骤。该文件暂不随本项目分发。
+| NVIDIA DLSS FG 运行库 | 随包提供，遵循 NVIDIA 原许可条款 |
 
 根据 [NVIDIA 官方支持表](https://www.nvidia.com/en-us/geforce/technologies/dlss/#compatibility)，各代显卡的功能支持范围如下；模组实际可用的功能与最高倍率由 SDK 查询决定。
 

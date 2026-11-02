@@ -19,7 +19,6 @@ foreach($name in @('Common.ps1','Install.ps1','Uninstall.ps1')){Copy-Item -Liter
 New-Item -ItemType Directory -Path (Join-Path $stage 'payload\AC7DLSS') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'payload\AC7DLSS.asi') -Destination (Join-Path $stage 'payload')
 foreach($name in Get-AC7RuntimeNames){
-    if($name -eq 'nvngx_dlssg.dll'){continue}
     Copy-Item -LiteralPath (Join-Path $root ('payload\AC7DLSS\'+$name)) -Destination (Join-Path $stage 'payload\AC7DLSS')
 }
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $archive -CompressionLevel Optimal

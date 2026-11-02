@@ -22,9 +22,7 @@ NR's cost grows with the number of input pixels. Besides SR reducing the base re
 | [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases) (x64) | Loads ASI mods; install separately |
 | NVIDIA DLSS SR/NR models | Included in the package under the NVIDIA SDK license |
 | NVIDIA Streamline runtime libraries | Included in the package under their original licenses and third-party notices |
-| NVIDIA DLSS FG runtime | Obtain from the official Streamline SDK 2.14.16 yourself |
-
-Before installing, get the official runtime `bin/x64/nvngx_dlssg.dll` from [Streamline SDK 2.14.16](https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.16), place it in `payload/AC7DLSS/` of the extracted package, then follow the installation steps below. This file is not distributed with this project yet.
+| NVIDIA DLSS FG runtime | Included under NVIDIA's original license terms |
 
 Per [NVIDIA's official support table](https://www.nvidia.com/en-us/geforce/technologies/dlss/#compatibility), feature support by GPU generation is as follows. The features and maximum multiplier actually available are determined by SDK queries.
 

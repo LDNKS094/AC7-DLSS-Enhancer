@@ -28,7 +28,7 @@ When upgrading manually, move the old `AC7NativeModels.asi` out of the game fold
 
 ## Settings
 
-Edit `AC7DLSS.ini` in the game folder and press **Ctrl+Shift+F11** to apply.
+Edit `AC7DLSS.ini` in the game folder and press **Ctrl+Shift+F11** to apply. F10 preserves individual settings; reloading settings does not override the master toggle.
 
 The normalized starting preset is [presets/AC7DLSS.ini](presets/AC7DLSS.ini). Updates do not overwrite your installed settings.
 
@@ -48,12 +48,10 @@ With `Enabled=1`, frame generation follows the native game state automatically; 
 
 | Shortcut | Action |
 |---|---|
-| Ctrl+Shift+F9 | Temporarily toggle the frame-generation request |
-| Ctrl+Shift+F10 | Toggle SR/NR/sharpening effects; FG is separate |
+| Ctrl+Shift+F10 | Master toggle for SR, NR, sharpening and FG; restores your settings when re-enabled |
 | Ctrl+Shift+F11 | Reload settings |
-| Ctrl+Shift+F12 | Save a before/after capture, excluding generated frames |
 
-Logs are named `AC7DLSS-*.log`; captures go to `AC7DLSSCaptures/`. Unexpected runtime failures log a reason and terminate the game. Keep the corresponding log when reporting an issue.
+Logs are named `AC7DLSS-*.log`. Development capture and frame-statistics code has been removed; existing captures are preserved. Unexpected runtime failures log a reason and terminate the game. Keep the corresponding log when reporting an issue.
 
 ## Uninstall
 
@@ -71,3 +69,13 @@ Requires Visual Studio 2022 C++ tools, Windows SDK, CMake and the dependencies i
 Build outputs go to `payload/`. Installation ZIPs and SHA-256 files go to `releases/`. Neither script deploys files or starts the game.
 
 `src/` contains production source, `presets/` configuration, `scripts/` release tools, and `licenses/` third-party notices. `development/` holds local development notes, history and captures and is excluded from installation packages. `build/` contains regenerable output only.
+
+| Source directory | Responsibility |
+|---|---|
+| `src/game/` | Native hooks, render-graph integration, View identity and camera reading |
+| `src/presentation/` | DXGI hooks, swap-chain bridge, HUDless composition and frame context |
+| `src/rendering/` | Scene processing, color passes, motion blur, guides and shared textures |
+| `src/nvidia/` | NGX models, shared GPU context and Streamline session |
+| `src/settings/` | SR/NR/FG parameter definitions; INI reading in `config.cpp` |
+| `src/input/` | Hotkey handling |
+| `shaders/` | All HLSL, compiled into the ASI at build time |

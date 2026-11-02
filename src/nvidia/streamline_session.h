@@ -1,0 +1,45 @@
+#pragma once
+#include <d3d12.h>
+#include <dxgi1_2.h>
+#include <wrl/client.h>
+#include <array>
+#include "../presentation/camera_state.h"
+#include "../presentation/frame_context.h"
+#include <memory>
+
+namespace ac7 {
+class GuideSnapshot;
+struct StreamlineInputCompletion {
+    Microsoft::WRL::ComPtr<ID3D12Fence>fence;
+    UINT64 value=0;
+};
+struct ScenePresentation {
+    ID3D12Resource*hudless;
+    const GuideSnapshot*guides;
+    const CameraState*camera;
+    std::array<unsigned,4>region;
+    uint64_t sequence;
+};
+// Process-pinned, like GpuContext; never shut down from DllMain or a layout destructor.
+void initializeStreamline(void(*log)(unsigned,const char*)noexcept);
+FgSettings requestStreamlineFg(const FgSettings&);
+void recordStreamlineGameState(const FrameContext&,float limit,bool allowsGeneration);
+bool streamlineGenerationNeedsRelease();
+void suspendStreamlineGeneration();
+void releaseStreamlineGenerationResources();
+Microsoft::WRL::ComPtr<ID3D12Device> bindStreamlineDevice(ID3D12Device*);
+Microsoft::WRL::ComPtr<ID3D12CommandQueue> nativeStreamlineQueue(ID3D12CommandQueue*);
+Microsoft::WRL::ComPtr<IDXGIFactory2> streamlineFactory(IDXGIFactory*);
+std::shared_ptr<const FrameContext>acquireStreamlineFrame();
+void sleepStreamlineFrame(const FrameContext&);
+void startStreamlineSimulation(const FrameContext&);
+void endStreamlineSimulation(const FrameContext&);
+void startStreamlineRender(const FrameContext&);
+void endStreamlineRender(const FrameContext&);
+void markStreamlinePresentStart(const FrameContext&);
+void markStreamlinePresentEnd(const FrameContext&);
+void beginStreamlinePresent(ID3D12Resource*backbuffer,unsigned backbuffers,const FrameContext*frame,const ScenePresentation*scene=nullptr);
+// Call on the presenting thread immediately after the actual Present.
+StreamlineInputCompletion finishStreamlinePresent();
+void reportStreamlineInputRejection(const char*);
+}

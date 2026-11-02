@@ -1,8 +1,4 @@
-/development/build/
-/development/artifacts/
-/development/history/nsight-generated/
-/development/history/legacy/renderdoc/diagnostics/
-/development/history/game-cleanup/payload-*/
+/development/
 /build/
 /artifacts/
 /NVIDIA Nsight Graphics/
@@ -14,11 +10,6 @@ __pycache__/
 /third_party/models/
 /third_party/downloads/
 /third_party/streamline/bin/
-/development/history/captures/
-/development/history/evidence/
-/development/history/experiments/
-/development/history/references/
-/development/history/recovery/
 /trash/
 /payload/
 /releases/
@@ -27,3 +18,5 @@ __pycache__/
 *.log
 *.pdb
 *.ilk
+
+AGENTS.md

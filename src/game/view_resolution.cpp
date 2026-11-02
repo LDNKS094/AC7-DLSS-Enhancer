@@ -41,9 +41,8 @@ void __fastcall recompute(void*matrices){
     originalRecompute(matrices);
 }
 void __fastcall visibility(void*renderer,void*rhi){
-    const auto settings=renderSettings();
+    auto settings=renderSettings();
     if(!settings.enabled){originalVisibility(renderer,rhi);return;}
-    const float scale=settings.scale>0?settings.scale:1.f;
     auto*b=static_cast<unsigned char*>(renderer);unsigned char*views=nullptr;int count=0;std::memcpy(&views,b+0xb8,8);std::memcpy(&count,b+0xc0,4);
     if(!views||count!=1){originalVisibility(renderer,rhi);return;}
     std::vector<Injected> injected;injected.reserve(size_t(count));
@@ -53,6 +52,7 @@ void __fastcall visibility(void*renderer,void*rhi){
         if(p[15]!=0||j[0]!=0||j[1]!=0)continue;
         unsigned char*family=nullptr;std::memcpy(&family,v,8);if(!family)continue;
         if(!admitSceneView(renderer,rhi,v,settings))continue;
+        const float scale=settings.scale>0?settings.scale:1.f;
         if(scale==1.f)continue; // Native-size NR/RCAS does not need SR projection jitter.
         std::memcpy(rect,v+0x70,16);
         const int width=rect[2]-rect[0],height=rect[3]-rect[1],outWidth=output[2]-output[0],outHeight=output[3]-output[1];

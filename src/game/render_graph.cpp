@@ -486,27 +486,34 @@ void __fastcall reset(void*list){discardSceneWork(list);originalReset(list);}
 extern "C" void ac7_temporal_build(void*context,unsigned char*view,bool*percentage,const float*panini)noexcept{build(context,view,percentage,panini);}
 extern "C" void ac7_temporal_color(void*context)noexcept{colorBuild(context);}
 void invalidateSceneHistory()noexcept{invalidate=true;}
-bool admitSceneView(void*renderer,void*rhi,unsigned char*view,const SceneSettings&settings)noexcept{
-    const bool models=settings.scale>0;
-    const float scale=models?settings.scale:1.f;
-    if(!scope||scope->renderer!=renderer||scope->rhi!=rhi||scope->view||!canQueueSceneWork(rhi)||!(scale>0&&scale<=1))return false;
+bool admitSceneView(void*renderer,void*rhi,unsigned char*view,SceneSettings&settings)noexcept{
+    if(!scope||scope->renderer!=renderer||scope->rhi!=rhi||scope->view||!canQueueSceneWork(rhi)||!settings.enabled)return false;
     try{
         auto*family=field<void*>(view,0);
         if(!family||!field<unsigned char>(renderer,0x7e)||!(field<unsigned char>(family,0x38)&1)||field<unsigned>(view,0x13e8)<2||field<unsigned>(view,0x9b0)!=0)return false;
+        auto depth=images(field<void*>(scene(),0x60));
+        ComPtr<ID3D11Device>device;depth.target->GetDevice(&device);
+        std::lock_guard<std::mutex>g(backendLock);
+        if(backend.pending||(backend.seen&&backend.stream==field<void*>(view,0x1410)&&backend.nativeCounter==field<unsigned>(family,0x68)))return false;
+        if(backend.device&&backend.device!=device)throw std::runtime_error("Temporal device changed");
+        if(!backend.device){backend.device=device;device->GetImmediateContext(&backend.context);}
+        const auto capabilities=GpuContext::acquire(device.Get()).modelCapabilities(settings.scale>0&&settings.scale<1.f,settings.nr.enabled);
+        settings.nr.enabled=capabilities.nr;
+        if(!capabilities.sr)settings.scale=capabilities.nr?1.f:0.f;
+        const bool models=settings.scale>0;
+        if(!models){
+            settings.sharpness=0;
+            if(!streamlineGenerationRequested()){settings.enabled=false;return false;}
+        }
+        const float scale=models?settings.scale:1.f;
+        if(!(scale>0&&scale<=1))return false;
         std::array<int,4>output{},low{};std::memcpy(output.data(),view+0x80,16);std::memcpy(low.data(),view+0x70,16);
         if(models&&low!=output)return false;
         const auto high=rectangle(output);if(models)for(unsigned i=0;i<4;i++)low[i]=int(output[i]*scale);const auto input=rectangle(low);
         const unsigned aw=field<unsigned>(scene(),0x208),ah=field<unsigned>(scene(),0x20c),bytes=field<unsigned>(base,0x3caa6c8);
         if(input.x+input.width>aw||input.y+input.height>ah||(models&&(high.x+high.width>aw||high.y+high.height>ah))||bytes<138*16||bytes>0xcf0)return false;
-        auto depth=images(field<void*>(scene(),0x60));D3D11_TEXTURE2D_DESC d{};depth.target->GetDesc(&d);
+        D3D11_TEXTURE2D_DESC d{};depth.target->GetDesc(&d);
         if(d.Width!=aw||d.Height!=ah||d.Format!=DXGI_FORMAT_R32G8X24_TYPELESS||d.SampleDesc.Count!=1||d.ArraySize!=1||d.MipLevels!=1)return false;
-        ComPtr<ID3D11Device>device;depth.target->GetDevice(&device);
-        std::lock_guard<std::mutex>g(backendLock);
-        if(backend.pending||(backend.seen&&backend.stream==field<void*>(view,0x1410)&&backend.nativeCounter==field<unsigned>(family,0x68)))return false;
-        if(backend.device&&backend.device!=device)throw std::runtime_error("Temporal device changed");
-        if(!backend.device){
-            backend.device=device;device->GetImmediateContext(&backend.context);
-        }
         auto frame=std::make_shared<SceneFrame>();frame->low=input;frame->high=high;frame->models=models;frame->allocation={aw,ah};frame->constantBytes=bytes;
         frame->nrSettings=settings.nr;frame->sharpness=settings.sharpness;frame->depth=depth.resolved;
         frame->stream=field<void*>(view,0x1410);frame->nativeCounter=field<unsigned>(family,0x68);

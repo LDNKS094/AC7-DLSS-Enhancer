@@ -13,8 +13,6 @@ __pycache__/
 /trash/
 /payload/
 /releases/
-/.local-state/
-/backups/
 *.log
 *.pdb
 *.ilk

@@ -27,7 +27,7 @@ NgxModels::NgxModels(GpuContext&context,unsigned width,unsigned height,unsigned 
     try {
         check(d->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&initAllocator_)));check(d->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,initAllocator_.Get(),nullptr,IID_PPV_ARGS(&initList_)));check(d->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&initFence_)));
         if(srEnabled_){
-            auto&m=models_[1];ngx(NVSDK_NGX_D3D12_GetCapabilityParameters(&m.parameters),"Capabilities");int available=0;ngx(m.parameters->Get(NVSDK_NGX_Parameter_SuperSampling_Available,&available),"Availability");if(!available)throw std::runtime_error("SR unavailable");auto*p=m.parameters;
+            auto&m=models_[1];ngx(NVSDK_NGX_D3D12_GetCapabilityParameters(&m.parameters),"SR parameters");auto*p=m.parameters;
             p->Set(NVSDK_NGX_Parameter_CreationNodeMask,1u);p->Set(NVSDK_NGX_Parameter_VisibilityNodeMask,1u);p->Set(NVSDK_NGX_Parameter_Width,width);p->Set(NVSDK_NGX_Parameter_Height,height);p->Set(NVSDK_NGX_Parameter_OutWidth,outputWidth_);p->Set(NVSDK_NGX_Parameter_OutHeight,outputHeight_);p->Set(NVSDK_NGX_Parameter_PerfQualityValue,int(quality));p->Set(NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags,int(NVSDK_NGX_DLSS_Feature_Flags_IsHDR|NVSDK_NGX_DLSS_Feature_Flags_AutoExposure|NVSDK_NGX_DLSS_Feature_Flags_MVLowRes|NVSDK_NGX_DLSS_Feature_Flags_DepthInverted));p->Set(NVSDK_NGX_Parameter_DLSS_Enable_Output_Subrects,0);
             ngx(NVSDK_NGX_D3D12_CreateFeature(initList_.Get(),NVSDK_NGX_Feature_SuperSampling,p,&m.feature),"CreateSR");
         }
@@ -70,8 +70,7 @@ void NgxModels::recordScene(ID3D12GraphicsCommandList*l,ID3D12Resource*color,ID3
         auto&m=models_[0];
         if(!m.feature){
             context_.initializeNgx();
-            ngx(NVSDK_NGX_D3D12_GetCapabilityParameters(&m.parameters),"NR capabilities");int available=0;
-            ngx(m.parameters->Get(NVSDK_NGX_Parameter_DLSSNR_Available,&available),"NR availability");if(!available)throw std::runtime_error("NR unavailable");
+            ngx(NVSDK_NGX_D3D12_GetCapabilityParameters(&m.parameters),"NR parameters");
             m.parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Width,nrWidth_);m.parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Height,height_);
             ngx(NVSDK_NGX_D3D12_CreateFeature(l,NVSDK_NGX_Feature_DLSSNR,m.parameters,&m.feature),"CreateSceneNR");
         }

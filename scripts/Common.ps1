@@ -31,43 +31,51 @@ function Get-AC7RuntimeNames{
 function Write-AC7Utf8([string]$Path,[string]$Text){
     [IO.File]::WriteAllText($Path,$Text,(New-Object Text.UTF8Encoding($false)))
 }
-function Update-AC7Files([string]$Game,[System.Collections.IDictionary]$Files,[string]$Backup){
-    $records=@()
+# Fails if an existing file is locked or read-only, or if its folder (or nearest existing ancestor) is not writable.
+function Assert-AC7Writable([string]$Path){
+    if(Test-Path -LiteralPath $Path -PathType Leaf){
+        try{[IO.File]::Open($Path,'Open','ReadWrite','None').Dispose()}
+        catch{throw "Cannot modify ${Path}: in use or no permission. $($_.Exception.Message)"}
+    }else{
+        $dir=Split-Path -Parent $Path
+        while(-not(Test-Path -LiteralPath $dir -PathType Container)){$dir=Split-Path -Parent $dir}
+        $probe=Join-Path $dir ('.ac7-probe-'+[guid]::NewGuid().ToString('N'))
+        try{[IO.File]::Open($probe,'CreateNew','Write','None').Dispose();Remove-Item -LiteralPath $probe -Force}
+        catch{throw "Cannot create files in ${dir}: no permission. $($_.Exception.Message)"}
+    }
+}
+# Removes $Path only if it is a directory inside the game folder and has no remaining entries.
+function Remove-AC7EmptyDir([string]$Path,[string]$Game){
+    if($Path -ne $Game -and (Test-Path -LiteralPath $Path -PathType Container) -and -not(Get-ChildItem -LiteralPath $Path -Force)){Remove-Item -LiteralPath $Path -Force}
+}
+# $Files: relative path => source file to copy, or $null to remove the target.
+# All targets are checked before anything changes. If a copy fails, the files copied in this run are removed.
+function Update-AC7Files([string]$Game,[System.Collections.IDictionary]$Files){
     foreach($relative in $Files.Keys){
         $target=Join-Path $Game $relative
-        $parent=Split-Path -Parent $target
-        foreach($item in @($Game,$parent,$target) | Select-Object -Unique){
+        foreach($item in @($Game,(Split-Path -Parent $target),$target) | Select-Object -Unique){
             if((Test-Path -LiteralPath $item) -and ((Get-Item -LiteralPath $item -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw "Refusing linked install path: $item"}
         }
-        $existed=Test-Path -LiteralPath $target
-        if($existed){
-            if(-not(Test-Path -LiteralPath $target -PathType Leaf)){throw "Expected a file: $target"}
-            $saved=Join-Path $Backup $relative
-            New-Item -ItemType Directory -Path (Split-Path -Parent $saved) -Force | Out-Null
-            Copy-Item -LiteralPath $target -Destination $saved
-        }
-        $records+=,[pscustomobject]@{Path=$relative;Existed=$existed}
+        Assert-AC7Writable $target
     }
-    $done=@()
+    $copied=@()
     try{
-        foreach($record in $records){
-            $done+=,$record
-            $target=Join-Path $Game $record.Path
-            $source=$Files[$record.Path]
-            if($null -eq $source){Remove-Item -LiteralPath $target -Force}
-            else{
+        foreach($relative in $Files.Keys){
+            $target=Join-Path $Game $relative
+            if($null -eq $Files[$relative]){
+                Remove-Item -LiteralPath $target -Force
+                Remove-AC7EmptyDir (Split-Path -Parent $target) $Game
+            }else{
                 New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
-                Copy-Item -LiteralPath $source -Destination $target -Force
+                $copied+=,$target
+                Copy-Item -LiteralPath $Files[$relative] -Destination $target -Force
             }
         }
     }catch{
         $failure=$_
-        for($i=$done.Count-1;$i -ge 0;$i--){
-            $record=$done[$i];$target=Join-Path $Game $record.Path
-            try{
-                if($record.Existed){Copy-Item -LiteralPath (Join-Path $Backup $record.Path) -Destination $target -Force}
-                elseif(Test-Path -LiteralPath $target){Remove-Item -LiteralPath $target -Force}
-            }catch{Write-Warning "Restore failed for $target; backup: $Backup"}
+        foreach($target in $copied){
+            Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+            Remove-AC7EmptyDir (Split-Path -Parent $target) $Game
         }
         throw $failure
     }

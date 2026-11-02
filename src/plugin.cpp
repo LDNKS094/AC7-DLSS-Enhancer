@@ -22,26 +22,37 @@ bool initialized=false,installed=false;
 std::filesystem::path iniPath;
 std::mutex lock;
 HANDLE logFile=INVALID_HANDLE_VALUE;
-bool writeLog(const char*line,int size,size_t capacity){
-    DWORD written=0;
-    return logFile!=INVALID_HANDLE_VALUE&&size>0&&size_t(size)<capacity&&WriteFile(logFile,line,DWORD(size),&written,nullptr)&&written==DWORD(size);
+std::mutex logLock;
+void writeLog(const char*line,int size,size_t capacity)noexcept{
+    OutputDebugStringA(line);
+    if(size<=0||size_t(size)>=capacity)return;
+    try{
+        std::lock_guard<std::mutex>guard(logLock);
+        if(logFile==INVALID_HANDLE_VALUE){
+            wchar_t path[32768];const auto n=GetModuleFileNameW(nullptr,path,32768);
+            if(!n||n==32768)return;
+            const auto file=std::filesystem::path(path).parent_path()/(L"AC7DLSS-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L".log");
+            logFile=CreateFileW(file.c_str(),GENERIC_WRITE,FILE_SHARE_READ,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+            if(logFile==INVALID_HANDLE_VALUE)return;
+        }
+        DWORD written=0;WriteFile(logFile,line,DWORD(size),&written,nullptr);
+        FlushFileBuffers(logFile);
+    }catch(...){/* Preserve the debugger output and fatal handling if logging fails. */}
 }
 [[noreturn]] void fail(unsigned code,const char*reason)noexcept{
     char line[2048];const auto n=std::snprintf(line,sizeof(line),"event=fatal code=%u reason=%.1900s\r\n",code,reason);
-    OutputDebugStringA(line);writeLog(line,n,sizeof(line));
-    if(logFile!=INVALID_HANDLE_VALUE)FlushFileBuffers(logFile);
+    writeLog(line,n,sizeof(line));
     EXCEPTION_RECORD record{};record.ExceptionCode=0xE0423701;record.ExceptionFlags=EXCEPTION_NONCONTINUABLE;
     record.NumberParameters=1;record.ExceptionInformation[0]=code;
     RaiseFailFastException(&record,nullptr,FAIL_FAST_GENERATE_EXCEPTION_ADDRESS);std::abort();
 }
-void log(const char*message)noexcept{
-    char line[2048];const auto n=std::snprintf(line,sizeof(line),"%.2000s\r\n",message);
-    if(!writeLog(line,n,sizeof(line)))fail(12,"Runtime log write failed");
+void logError(const char*message)noexcept{
+    char line[2048];const auto n=std::snprintf(line,sizeof(line),"event=error reason=%.1900s\r\n",message);
+    writeLog(line,n,sizeof(line));
 }
 void applyFgRequest(){
     auto request=fgSettings;request.enabled=request.enabled&&masterHotkey.enabled;
-    const auto applied=ac7::requestStreamlineFg(request);
-    if(masterHotkey.enabled)fgSettings=applied;
+    ac7::requestStreamlineFg(request);
 }
 void loadSettings(){
     unsigned nrInvalid=0,srInvalid=0,fgInvalid=0;
@@ -50,16 +61,15 @@ void loadSettings(){
     if(next.enabled!=srSettings.enabled||(next.enabled&&next.qualityMode!=srSettings.qualityMode))ac7::invalidateSceneHistory();
     srSettings=next;
     fgSettings=ac7::loadFgSettings(iniPath,fgInvalid,fgSettings);applyFgRequest();
-    if(nrInvalid||srInvalid||fgInvalid)log("Invalid configuration values ignored; previous values retained");
+    if(nrInvalid||srInvalid||fgInvalid)logError("Invalid configuration values ignored; previous values retained");
 }
 void pollControls(){
     DWORD foregroundPid=0;GetWindowThreadProcessId(GetForegroundWindow(),&foregroundPid);
     const bool foreground=foregroundPid==GetCurrentProcessId(),modifiers=(GetAsyncKeyState(VK_CONTROL)&0x8000)&&(GetAsyncKeyState(VK_SHIFT)&0x8000);
     if(masterHotkey.update(modifiers&&(GetAsyncKeyState(VK_F10)&0x8000),foreground)){
         applyFgRequest();ac7::invalidateSceneHistory();
-        log(masterHotkey.enabled?"All enhancements enabled":"All enhancements disabled");
     }
-    if(reloadHotkey.pressed(modifiers&&(GetAsyncKeyState(VK_F11)&0x8000),foreground)){loadSettings();log("Settings reloaded");}
+    if(reloadHotkey.pressed(modifiers&&(GetAsyncKeyState(VK_F11)&0x8000),foreground))loadSettings();
 }
 ac7::SceneSettings renderSettings(){
     std::lock_guard<std::mutex>guard(lock);
@@ -72,7 +82,7 @@ void runSceneFrame(ac7::SceneFrame*frame)noexcept{
     try{ac7::executeSceneFrame(frame);}
     catch(const std::exception&e){sceneFailure(e.what());}catch(...){sceneFailure("Scene execution failed");}
 }
-void streamlineLog(unsigned,const char*message)noexcept{log(message);}
+void streamlineLog(unsigned type,const char*message)noexcept{if(type>=2)logError(message);}
 DWORD WINAPI bootstrap(void*){
     try{
         std::lock_guard<std::mutex>guard(lock);
@@ -97,10 +107,6 @@ extern "C" __declspec(dllexport) void WINAPI InitializeASI(){
         wchar_t path[32768];const auto n=GetModuleFileNameW(module,path,32768);
         if(!n||n==32768)fail(12,"ASI path unavailable");
         const auto folder=std::filesystem::path(path).parent_path();iniPath=folder/L"AC7DLSS.ini";
-        const auto name=L"AC7DLSS-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L".log";
-        logFile=CreateFileW((folder/name).c_str(),GENERIC_WRITE,FILE_SHARE_READ,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
-        if(logFile==INVALID_HANDLE_VALUE)fail(12,"Runtime log creation failed");
-        if(GetModuleHandleW(L"AC7NativeModels.asi")||GetModuleHandleW(L"AC7NativeNeutral.asi")||GetModuleHandleW(L"AC7NativeTiming.asi")||GetModuleHandleW(L"AC7NativeInterop.asi"))fail(14,"Conflicting earlier AC7 DLSS ASI is loaded; remove the old ASI before starting");
         ac7::initializeStreamline(&streamlineLog);loadSettings();
         const auto result=MH_Initialize();if(result!=MH_OK&&result!=MH_ERROR_ALREADY_INITIALIZED)fail(2,"MinHook initialization failed");
         ac7::installPresentationEntry(&sceneFailure);

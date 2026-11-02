@@ -55,6 +55,9 @@ struct Session {
     uint64_t previousSequence=0;
 };
 Session&session=*new Session;
+bool generationRequested(){
+    return session.requested.enabled&&session.requested.multiplier!=1&&session.dlssgOptions&&session.lowLatencyAvailable&&session.sleep&&session.marker;
+}
 void inputStatus(const char*reason){
     const std::string next=reason?reason:"";
     if(session.inputRefusal==next)return;
@@ -156,14 +159,18 @@ bool configureGeneration(const FrameContext*frame,const ScenePresentation*scene,
     return reset;
 }
 }
-FgSettings requestStreamlineFg(const FgSettings&settings){
+void requestStreamlineFg(const FgSettings&settings){
     std::lock_guard<std::mutex>guard(session.lock);
-    auto next=settings;
-    if(next.enabled&&session.device&&!session.dlssgOptions){
-        next.enabled=false;generationStatus("FG unavailable on this system; request disabled");
-    }
-    if(next.enabled&&!session.requested.enabled)session.refreshReflex=true;
-    session.requested=next;return next;
+    if(settings.enabled&&!session.requested.enabled)session.refreshReflex=true;
+    session.requested=settings;
+}
+bool streamlineGenerationRequested(){
+    std::lock_guard<std::mutex>guard(session.lock);
+    return generationRequested();
+}
+void reportCapabilityFallback(const char*message){
+    std::lock_guard<std::mutex>guard(session.lock);
+    if(session.log)session.log(1,message);
 }
 void recordStreamlineGameState(const FrameContext&frame,float limit,bool allowsGeneration){
     if(!std::isfinite(limit))throw std::runtime_error("Nonfinite native game FPS limit");
@@ -270,7 +277,7 @@ ComPtr<ID3D12Device>bindStreamlineDevice(ID3D12Device*device){
         session.lowLatencyAvailable=state.lowLatencyAvailable;
         session.sleep=feature<PFun_slReflexSleep>(sl::kFeatureReflex,"slReflexSleep");
     }else if(session.log)session.log(1,"Reflex unsupported; low-latency sleep unavailable");
-    session.device=device;session.proxy=proxy;if(!loaded)session.requested.enabled=false;return proxy;
+    session.device=device;session.proxy=proxy;return proxy;
 }
 ComPtr<ID3D12CommandQueue>nativeStreamlineQueue(ID3D12CommandQueue*queue){
     std::lock_guard<std::mutex>guard(session.lock);
@@ -286,19 +293,20 @@ ComPtr<IDXGIFactory2>streamlineFactory(IDXGIFactory*factory){
 std::shared_ptr<const FrameContext>acquireStreamlineFrame(){
     std::lock_guard<std::mutex>guard(session.lock);
     if(!session.device)return {};
+    if(session.requested.enabled&&session.refreshReflex&&session.reflexState){
+        sl::ReflexState state{};check(session.reflexState(state),"Query Reflex availability for FG request");
+        session.lowLatencyAvailable=state.lowLatencyAvailable;session.refreshReflex=false;
+    }
     sl::FrameToken*token=nullptr;check(session.frame(token,nullptr),"Acquire native main-frame token");
     if(!token)throw std::runtime_error("Streamline returned no native main-frame token");
-    return std::make_shared<const FrameContext>(FrameContext{token,session.marker!=nullptr,session.requested});
+    auto actual=session.requested;actual.enabled=generationRequested();
+    return std::make_shared<const FrameContext>(FrameContext{token,session.marker!=nullptr,actual});
 }
 void sleepStreamlineFrame(const FrameContext&frame){
     if(!frame.pcl)return;
     PFun_slReflexSleep*sleep=nullptr;
     {std::lock_guard<std::mutex>guard(session.lock);
         if(!frame.sdkToken||frame.markers||!session.marker)throw std::runtime_error("Invalid native Reflex sleep phase");
-        if(frame.fg.enabled&&session.refreshReflex&&session.reflexState){
-            sl::ReflexState state{};check(session.reflexState(state),"Query Reflex availability for FG request");
-            session.lowLatencyAvailable=state.lowLatencyAvailable;session.refreshReflex=false;
-        }
         const bool requested=frame.fg.enabled&&frame.fg.multiplier!=1&&frame.allowsGeneration;
         const auto mode=session.lowLatencyAvailable&&session.dlssgOptions&&(requested||session.generationMode!=sl::DLSSGMode::eOff)?sl::ReflexMode::eLowLatency:sl::ReflexMode::eOff;
         uint32_t limitUs=0;

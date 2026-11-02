@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AC7DLSSEnhancer VERSION 1.0.4 LANGUAGES C CXX ASM_MASM)
+project(AC7DLSSEnhancer VERSION 1.0.6 LANGUAGES C CXX ASM_MASM)
 if(NOT WIN32)
   message(FATAL_ERROR "AC7 DLSS Enhancer requires Windows")
 endif()
@@ -11,7 +11,7 @@ set(AC7_MINHOOK_SOURCE_DIR "${PROJECT_SOURCE_DIR}/third_party/minhook" CACHE PAT
 set(NGX_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/third_party/ngx/include" CACHE PATH "NVIDIA NGX headers")
 set(NGX_LOADER_LIBRARY "${PROJECT_SOURCE_DIR}/third_party/ngx/lib/nvsdk_ngx_d.lib" CACHE FILEPATH "NVIDIA NGX loader")
 if(NOT EXISTS "${AC7_MINHOOK_SOURCE_DIR}/include/MinHook.h" OR NOT EXISTS "${NGX_INCLUDE_DIR}/nvsdk_ngx.h" OR NOT EXISTS "${NGX_LOADER_LIBRARY}")
-  message(FATAL_ERROR "Missing build dependencies; see third_party/README.md")
+  message(FATAL_ERROR "Missing build dependencies: MinHook source, NGX headers or NGX loader library under third_party/")
 endif()
 find_program(AC7_FXC_EXECUTABLE NAMES fxc HINTS
   "$ENV{WindowsSdkDir}/bin/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/x64"

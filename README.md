@@ -2,80 +2,134 @@
 
 English | [中文](README_zh.md)
 
-Adds DLSS Super Resolution, neural rendering, optional sharpening and NVIDIA frame generation to *Ace Combat 7*.
+Adds DLSS neural rendering, super resolution and frame generation to *Ace Combat 7*.
+
+Install with [script install](#script-install) or [manual install](#manual-install).
+
+## How it works
+
+The mod takes scene color, depth, motion vectors and camera parameters from the game's existing render pipeline and passes them to NVIDIA neural rendering (NR), super resolution (SR) and frame generation (FG), then returns the result to the game. When all three are enabled, the order is **NR → SR → FG**: NR first restores HDR color on the low-resolution scene, SR then reconstructs the target resolution, and after the game composites the frame, FG generates intermediate frames from game frames and their motion vectors before presentation.
+
+NR's cost grows with the number of input pixels. Besides SR reducing the base render resolution, NR also applies non-uniform horizontal compression: the centre of the image keeps full sampling, while sampling density falls off smoothly toward both sides. NR therefore solves over a narrower working domain, and its result is mapped back to the original width before it goes to SR.
 
 ## Install
 
-Requires Windows x64, an NVIDIA GPU and driver supporting the enabled features, and a separately installed x64 ASI Loader. UE4SS is not required. Existing ultrawide and force-feedback mods can remain installed.
+### Prerequisites
 
-Close the game and run `Install.cmd`. The installer finds the Steam game folder, or you can specify it:
+| Dependency | Notes |
+| --- | --- |
+| NVIDIA GeForce RTX GPU | Supported features vary by series; see the table below |
+| [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases) (x64) | Loads ASI mods; install separately |
+| NVIDIA DLSS SR/NR models | Included in the package under the NVIDIA SDK license |
+| NVIDIA Streamline runtime libraries | Included in the package under their original licenses and third-party notices |
+| NVIDIA DLSS FG runtime | Obtain from the official Streamline SDK 2.14.16 yourself |
+
+Before installing, get the official runtime `bin/x64/nvngx_dlssg.dll` from [Streamline SDK 2.14.16](https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.16), place it in `payload/AC7DLSS/` of the extracted package, then follow the installation steps below. This file is not distributed with this project yet.
+
+Per [NVIDIA's official support table](https://www.nvidia.com/en-us/geforce/technologies/dlss/#compatibility), feature support by GPU generation is as follows. The features and maximum multiplier actually available are determined by SDK queries.
+
+| Feature | RTX 20/30 | RTX 40 | RTX 50 |
+| --- | --- | --- | --- |
+| Super resolution (SR) | Supported | Supported | Supported |
+| Neural rendering (NR, DLSS 5) | Not supported | Not supported | Supported |
+| Frame generation (FG) | Not supported | Supported | Supported |
+| Multi-frame generation / dynamic Auto | Not supported | Not supported | Supported |
+
+**NR is currently officially supported only on RTX 50 series.**
+
+### Script install
+
+Run `Install.cmd`. The installer finds the Steam game folder automatically.
+
+If the game is not found, specify the folder:
 
 ```powershell
-.\Install.cmd -GameDirectory 'F:\SteamLibrary\steamapps\common\ACE COMBAT 7'
+.\Install.cmd -GameDirectory 'G:\Games\ACE COMBAT 7'
 ```
 
-Existing `AC7DLSS.ini` settings are preserved. On the first upgrade from the old version, the installer converts `AC7NativeModels.ini` settings and backs up the old ASI to avoid loading both versions. Legacy models, logs and captures remain untouched. Backups are kept in this package's `backups/` folder.
+The installer does not overwrite existing configuration files.
 
-For manual installation:
+### Script uninstall
 
-| Package content | Game destination |
+Run `Uninstall.cmd` to remove the mod files and configuration added by this package.
+
+To specify the folder:
+
+```powershell
+.\Uninstall.cmd -GameDirectory 'G:\Games\ACE COMBAT 7'
+```
+
+### Manual install
+
+Copy these files to the game folder:
+
+| Package content | Copy to |
 |---|---|
-| `payload/AC7DLSS.asi` | Beside `Ace7Game.exe` |
-| `payload/AC7DLSS/` | Same folder name, containing all runtime libraries |
-| `presets/AC7DLSS.ini` | `AC7DLSS.ini` beside `Ace7Game.exe` |
+| `payload/AC7DLSS.asi` | Game root |
+| `presets/AC7DLSS.ini` | Game root |
+| `payload/AC7DLSS/*.dll` | `AC7DLSS/` in the game root |
 
-When upgrading manually, move the old `AC7NativeModels.asi` out of the game folder and keep a backup. Do not load both versions. Keep your ASI Loader, UE4SS and other mods.
+### Manual uninstall
 
-## Settings
+Delete the files above.
 
-Edit `AC7DLSS.ini` in the game folder and press **Ctrl+Shift+F11** to apply. F10 preserves individual settings; reloading settings does not override the master toggle.
+## Usage and Settings
 
-The normalized starting preset is [presets/AC7DLSS.ini](presets/AC7DLSS.ini). Updates do not overwrite your installed settings.
+After installation, start the game directly.
 
-| Section | Settings |
+To change settings, edit `AC7DLSS.ini` in the game folder and press **Ctrl+Shift+F11** to apply them live.
+
+Press **Ctrl+Shift+F10** to turn the whole mod's processing on or off.
+
+| Section | Purpose |
 |---|---|
 | `SuperResolution` | DLSS toggle, quality mode and sharpening |
-| `NeuralRendering` | Effect strength, preset and screen-edge optimization |
+| `NeuralRendering` | Neural rendering strength, preset and screen-edge load reduction |
 | `FrameGeneration` | Frame generation toggle and multiplier |
 
-Disable the game's FXAA. `QualityMode` values 0/1/2 select Quality/Balanced/Performance.
+Turning off the game's FXAA is recommended; DLSS already handles aliasing well.
 
-`OptimizeEdges` reduces neural-rendering quality at the screen edges to improve performance. `CenterAspectRatio` sets the full-quality centre area, higher `EdgeQuality` retains more edge detail, and `BlendWidth` sets the transition width.
+`OptimizeEdges` lowers neural-rendering quality at the screen edges to reduce load.
+`CenterAspectRatio` sets the proportion of the centre area kept at full quality.
+`EdgeQuality`: higher values keep more edge detail.
+`BlendWidth` sets the transition width.
 
-Frame generation uses `Multiplier=0` for Auto, `1` for no generated frames, and `2` or higher for a fixed total multiplier. Auto targets the game FPS cap, or display refresh when unlimited; VSync takes priority. Fixed multipliers retain the game's FPS cap. Requests above the supported maximum are capped. Unsupported dynamic Auto falls back to the highest fixed multiplier; unsupported FG is disabled.
-
-With `Enabled=1`, frame generation follows the native game state automatically; a gameplay hotkey is not required. Recorded sessions confirm SR, NR, fixed 2x and Auto additional presentation. Automatic menu/pause transitions remain unconfirmed in those records; performance gains have not been measured.
-
-| Shortcut | Action |
-|---|---|
-| Ctrl+Shift+F10 | Master toggle for SR, NR, sharpening and FG; restores your settings when re-enabled |
-| Ctrl+Shift+F11 | Reload settings |
-
-Logs are named `AC7DLSS-*.log`. Development capture and frame-statistics code has been removed; existing captures are preserved. Unexpected runtime failures log a reason and terminate the game. Keep the corresponding log when reporting an issue.
-
-## Uninstall
-
-Close the game and run `Uninstall.cmd`, optionally with the same `-GameDirectory` argument. This removes the mod's ASI and eight runtime libraries while keeping settings, cache, logs, captures, legacy files and other mods.
+`Multiplier` sets the frame generation multiplier. The default is Auto, which targets the game's FPS cap. `2` or higher is a fixed total multiplier that keeps the game's FPS cap. Values above the supported range fall back to the highest supported multiplier.
 
 ## Build from source
 
-Requires Visual Studio 2022 C++ tools, Windows SDK, CMake and the dependencies in `third_party/`. SDK binaries and models are not stored in Git; see [dependency notes](third_party/README.md).
+Requirements: Visual Studio 2022 (C++ tools and Windows SDK) and CMake.
+
+External models and precompiled libraries are excluded from Git and must be supplied after cloning. Paths below are relative to the project root; SDK headers and MinHook source are already included in the repository.
+
+| Dependency source | Destination |
+| --- | --- |
+| Release SR model from the [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS); currently file version `310.9.16.0` | `third_party/models/nvngx_dlss.dll` |
+| Release NR model from the [RTX Remix](https://github.com/NVIDIAGameWorks/rtx-remix) NGX/NR SDK; currently archive `rtx-remix-ngx_sdk_dlnr@2.7z`, file version `310.9.16.0` | `third_party/models/nvngx_dlssnr.dll` |
+| `nvsdk_ngx_d.lib` from the same NGX/NR SDK | `third_party/ngx/lib/nvsdk_ngx_d.lib` |
+| Release runtimes from `bin/x64/` in [Streamline SDK 2.14.16](https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.16) | `third_party/streamline/bin/x64/` |
+
+Each component retains its original license. The build places the ASI and the runtime libraries above into `payload/`.
+
+Run from the project root:
 
 ```powershell
-.\scripts\Build.ps1 -CMake 'cmake'
-.\scripts\Package.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1
 ```
 
-Build outputs go to `payload/`. Installation ZIPs and SHA-256 files go to `releases/`. Neither script deploys files or starts the game.
+Output:
 
-`src/` contains production source, `presets/` configuration, `scripts/` release tools, and `licenses/` third-party notices. `development/` holds local development notes, history and captures and is excluded from installation packages. `build/` contains regenerable output only.
+```text
+payload/
+  AC7DLSS.asi
+```
 
-| Source directory | Responsibility |
-|---|---|
-| `src/game/` | Native hooks, render-graph integration, View identity and camera reading |
-| `src/presentation/` | DXGI hooks, swap-chain bridge, HUDless composition and frame context |
-| `src/rendering/` | Scene processing, color passes, motion blur, guides and shared textures |
-| `src/nvidia/` | NGX models, shared GPU context and Streamline session |
-| `src/settings/` | SR/NR/FG parameter definitions; INI reading in `config.cpp` |
-| `src/input/` | Hotkey handling |
-| `shaders/` | All HLSL, compiled into the ASI at build time |
+After building, deploy the output using the regular installation method.
+
+## Credits
+
+- [OptiScaler](https://github.com/optiscaler/OptiScaler): referenced for its D3D11/D3D12 swap-chain wrapping, shared-resource and GPU resource retirement approaches.
+
+## License
+
+Original project code is licensed under the [MIT License](LICENSE). Third-party code, NVIDIA models and runtime libraries retain their own licenses and are not covered by the project's MIT grant. See [third-party notices](licenses/README.md).

@@ -1,8 +1,8 @@
 # AC7 Native Adapter
 
-目标是 AC7 原生 HDR NR／SR、超宽屏 NR 周边减负和 NVIDIA 官方 DLSSG 接入。NR／SR／周边压缩已有用户实机反馈；FG 尚未接通。
+目标是 AC7 原生 HDR NR／SR、超宽屏 NR 周边减负和 NVIDIA 官方 DLSSG 接入。NR／SR／周边压缩已有用户实机反馈；FG 已加入可配置启用接线，尚未取得实际生成帧反馈。
 
-统一上下文与目录整理已提交为 `aa796fe`。HUDless已有用户关卡反馈；相机常量、guides及同帧token也有启动提交日志。最新 [native-reflex-phases候选](development/artifacts/releases/native-reflex-phases/AC7NativeModels.asi) 本次主菜单启动日志确认同一真实帧的模拟／RHI提交／Present六阶段标记均被SDK接受，SR／NR持续运行，无fatal。低延迟模式Off、FG关闭；尚无关卡反馈或延迟收益测量。SDK内部消费者完成点、独立FG取数及能力驱动倍率仍未接通。本轮代码未提交，旧候选保留，不改变画质参数。
+当前留档包含官方呈现、输入退休、独立原生取数及可配置FG；前序基线为 `5bbb6d4`，不push，个人笔记不纳入。最新 [fg-queue-retirement ASI](development/artifacts/releases/fg-queue-retirement/AC7NativeModels.asi) 已有用户关卡反馈“没有问题”，日志确认SDK报告额外呈现帧、SR／NR持续运行，无fatal。首次零消费点误判已修正，失败及成功日志均保留。当前FG默认关闭，手动进入关卡后启用是临时限制；下一步关联可靠原生状态，使用户启用选择在关卡自动生效、菜单／暂停时自动停用、恢复后继续。该自动管理尚未实现，暂仍需在暂停／返回菜单前手动关闭。未改SR／NR画质参数，未测性能收益。
 
 ## 目录与文档
 
@@ -47,10 +47,16 @@ PeripheralCompression=0
 CenterAspect=1.3333333
 EdgeScale=0.5
 TransitionWidth=0.05
+
+[FG]
+Enabled=0
+Multiplier=0
 ```
 
 Mode 0／1／2 对应 Quality（2/3）、Balanced（58%）、Performance（50%）。Sharpness 为0–1，0旁路 RCAS。SR 关闭可继续原生尺寸 NR；独立 RCAS 不是目标场景，允许通用链自然工作，不专门适配。SkinStructure 已移除。
 
-游戏前台 Ctrl+Shift+F10 切换整模组，F11 重载配置，F12 保存下一成功效果帧的 HDR 输入／最终输出预览。F12 包含实际开启的 NR／SR／RCAS 效果，没有单独保存 NR 中间结果。
+FG Enabled默认0，Multiplier为0时采用SDK默认请求，或填写至少2的目标总倍率；超出本机SDK上限会明确拒绝，不自动降低倍率。FG启用需要同帧输入与Reflex低延迟支持，实际选项在Present线程落实。原生菜单／暂停状态未映射，首轮在关卡内手动开启，并在暂停／返回菜单前关闭。
+
+游戏前台 Ctrl+Shift+F9 临时切换FG请求，不写INI；F10只切换模型效果，F11重载全部配置，F12保存下一成功效果帧的HDR输入／最终输出预览。F12包含NR／SR／RCAS效果，不包含插帧，也没有单独保存NR中间结果。
 
 原始 View 身份、真实 jitter、原生 RHI 顺序、producer Flush、跨 API fence 及资源退休均保留。意外错误尽力记录 `fatal` 原因后终止，不静默停用；无 GPU 像素读回检查、测试宿主或自动部署。当前没有帧时间收益实测。

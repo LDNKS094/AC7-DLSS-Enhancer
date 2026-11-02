@@ -9,6 +9,10 @@
 
 namespace ac7 {
 class GuideSnapshot;
+struct StreamlineInputCompletion {
+    Microsoft::WRL::ComPtr<ID3D12Fence>fence;
+    UINT64 value=0;
+};
 struct ScenePresentation {
     ID3D12Resource*hudless;
     const GuideSnapshot*guides;
@@ -18,6 +22,10 @@ struct ScenePresentation {
 };
 // Process-pinned, like ModelContext; never shut down from DllMain or a layout destructor.
 void initializeStreamline(void(*log)(unsigned,const char*)noexcept);
+void requestStreamlineFg(const FgSettings&);
+bool streamlineGenerationNeedsRelease();
+void suspendStreamlineGeneration();
+void releaseStreamlineGenerationResources();
 Microsoft::WRL::ComPtr<ID3D12Device> bindStreamlineDevice(ID3D12Device*);
 Microsoft::WRL::ComPtr<ID3D12CommandQueue> nativeStreamlineQueue(ID3D12CommandQueue*);
 Microsoft::WRL::ComPtr<IDXGIFactory2> streamlineFactory(IDXGIFactory*);
@@ -29,6 +37,8 @@ void startStreamlineRender(const PresentationFrame&);
 void endStreamlineRender(const PresentationFrame&);
 void markStreamlinePresentStart(const PresentationFrame&);
 void markStreamlinePresentEnd(const PresentationFrame&);
-void beginStreamlinePresent(ID3D12Resource*backbuffer,const PresentationFrame*frame,const ScenePresentation*scene=nullptr);
+void beginStreamlinePresent(ID3D12Resource*backbuffer,unsigned backbuffers,const PresentationFrame*frame,const ScenePresentation*scene=nullptr);
+// Call on the presenting thread immediately after the actual Present.
+StreamlineInputCompletion finishStreamlinePresent();
 void reportStreamlineInputRejection(const char*);
 }

@@ -9,6 +9,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 
 namespace ac7 {
 namespace {
@@ -28,7 +29,19 @@ struct Session {
     PFun_slIsFeatureLoaded*loaded=nullptr;
     PFun_slIsFeatureSupported*supported=nullptr;
     PFun_slGetFeatureFunction*featureFunction=nullptr;
+    PFun_slDLSSGGetState*dlssgState=nullptr;
+    PFun_slDLSSGSetOptions*dlssgOptions=nullptr;
+    PFun_slFreeResources*freeResources=nullptr;
+    sl::DLSSGMode generationMode=sl::DLSSGMode::eOff;
+    sl::DLSSGOptions appliedOptions{};
+    FgSettings requested{};
+    unsigned maxGeneratedFrames=0,minDimension=0;
+    bool mayHaveGenerationResources=false,generatedReported=false,lowLatencyAvailable=false,refreshReflex=false;
+    std::string generationStatus;
     PFun_slReflexSleep*sleep=nullptr;
+    PFun_slReflexSetOptions*reflexOptions=nullptr;
+    PFun_slReflexGetState*reflexState=nullptr;
+    sl::ReflexMode reflexMode=sl::ReflexMode::eOff;
     PFun_slPCLSetMarker*marker=nullptr;
     bool phasesSubmitted=false;
     void(*log)(unsigned,const char*)noexcept=nullptr;
@@ -62,7 +75,7 @@ void marker(const PresentationFrame&frame,sl::PCLMarker next,sl::PCLMarker requi
         bit(sl::PCLMarker::eRenderSubmitEnd)|bit(sl::PCLMarker::ePresentStart)|bit(sl::PCLMarker::ePresentEnd);
     if((frame.markers&complete)==complete&&!session.phasesSubmitted){
         session.phasesSubmitted=true;
-        if(session.log)session.log(0,"Native simulation/render/present phase markers submitted; low-latency mode off");
+        if(session.log)session.log(0,session.reflexMode==sl::ReflexMode::eOff?"Native simulation/render/present phase markers submitted; low-latency mode off":"Native simulation/render/present phase markers submitted; low-latency mode on");
     }
 }
 template<class T>ComPtr<T>upgraded(T*object,const char*stage){
@@ -78,6 +91,81 @@ bool unavailable(sl::Result result){
         default:return false;
     }
 }
+void generationStatus(const std::string&message){
+    if(session.generationStatus==message)return;
+    session.generationStatus=message;if(session.log)session.log(0,message.c_str());
+}
+bool applyGenerationOptions(const sl::DLSSGOptions&options){
+    const auto&a=session.appliedOptions;
+    if(std::tie(a.mode,a.numFramesToGenerate,a.flags,a.queueParallelismMode,a.numBackBuffers,a.mvecDepthWidth,a.mvecDepthHeight,a.colorWidth,a.colorHeight,a.colorBufferFormat,
+        a.mvecBufferFormat,a.depthBufferFormat,a.hudLessBufferFormat)==
+        std::tie(options.mode,options.numFramesToGenerate,options.flags,options.queueParallelismMode,options.numBackBuffers,options.mvecDepthWidth,options.mvecDepthHeight,options.colorWidth,options.colorHeight,options.colorBufferFormat,
+        options.mvecBufferFormat,options.depthBufferFormat,options.hudLessBufferFormat))return false;
+    if(!session.dlssgOptions){if(options.mode!=sl::DLSSGMode::eOff)throw std::runtime_error("DLSSG options unavailable");return false;}
+    check(session.dlssgOptions(sl::ViewportHandle(0),options),"Apply real-present DLSSG options");
+    session.appliedOptions=options;session.generationMode=options.mode;
+    if(options.mode!=sl::DLSSGMode::eOff)session.mayHaveGenerationResources=true;
+    return options.mode!=sl::DLSSGMode::eOff;
+}
+bool configureGeneration(const PresentationFrame*frame,const ScenePresentation*scene,const D3D12_RESOURCE_DESC&color,const sl::Extent&region,const sl::Extent&guides,unsigned backbuffers){
+    sl::DLSSGOptions options{};
+    const bool requested=session.requested.enabled;
+    const char*reason=nullptr;
+    if(!requested)reason="disabled by request";
+    else if(!session.dlssgOptions)reason="DLSSG unsupported on this system";
+    else if(!session.lowLatencyAvailable||!session.sleep||!session.marker)reason="Reflex low-latency support unavailable";
+    else if(!frame||!frame->fg.enabled)reason="no matching enabled native simulation frame";
+    else if(!scene)reason="no compatible same-frame scene inputs";
+    else if(session.reflexMode==sl::ReflexMode::eOff)reason="matching Reflex low-latency phase has not started";
+    else if(!session.maxGeneratedFrames)reason="SDK generation capability unavailable";
+    else if(region.width<session.minDimension||region.height<session.minDimension)reason="scene output region below SDK minimum";
+    if(!reason){
+        options.numFramesToGenerate=frame->fg.multiplier?frame->fg.multiplier-1:options.numFramesToGenerate;
+        if(options.numFramesToGenerate>session.maxGeneratedFrames){
+            generationStatus("FG off: requested multiplier "+std::to_string(uint64_t(options.numFramesToGenerate)+1)+
+                " exceeds SDK maximum "+std::to_string(uint64_t(session.maxGeneratedFrames)+1));
+            reason="unsupported multiplier";
+        }else options.mode=sl::DLSSGMode::eOn;
+    }
+    if(options.mode==sl::DLSSGMode::eOn){
+        options.flags=sl::DLSSGFlags::eRetainResourcesWhenOff;
+        options.queueParallelismMode=sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
+        options.numBackBuffers=backbuffers;options.colorWidth=UINT(color.Width);options.colorHeight=color.Height;
+        options.colorBufferFormat=unsigned(color.Format);options.mvecDepthWidth=guides.width;options.mvecDepthHeight=guides.height;
+        options.mvecBufferFormat=unsigned(DXGI_FORMAT_R16G16_FLOAT);options.depthBufferFormat=unsigned(DXGI_FORMAT_R32_FLOAT);
+        options.hudLessBufferFormat=unsigned(color.Format);
+    }else{
+        options=session.appliedOptions;options.mode=sl::DLSSGMode::eOff;
+        if(session.mayHaveGenerationResources)options.flags=sl::DLSSGFlags::eRetainResourcesWhenOff;
+    }
+    const bool reset=applyGenerationOptions(options);
+    if(options.mode==sl::DLSSGMode::eOn)generationStatus("FG enabled: requested multiplier "+std::to_string(uint64_t(options.numFramesToGenerate)+1)+
+        ", SDK maximum "+std::to_string(uint64_t(session.maxGeneratedFrames)+1));
+    else if(!reason||std::strcmp(reason,"unsupported multiplier"))generationStatus(std::string("FG off: ")+(reason?reason:"no request"));
+    return reset;
+}
+}
+void requestStreamlineFg(const FgSettings&settings){
+    if(settings.multiplier==1)throw std::invalid_argument("FG multiplier must be zero or at least two");
+    std::lock_guard<std::mutex>guard(session.lock);
+    if(settings.enabled&&!session.requested.enabled)session.refreshReflex=true;
+    session.requested=settings;
+}
+bool streamlineGenerationNeedsRelease(){
+    std::lock_guard<std::mutex>guard(session.lock);return !session.requested.enabled&&session.mayHaveGenerationResources;
+}
+void suspendStreamlineGeneration(){
+    std::lock_guard<std::mutex>guard(session.lock);
+    auto options=session.appliedOptions;options.mode=sl::DLSSGMode::eOff;
+    if(session.mayHaveGenerationResources)options.flags=sl::DLSSGFlags::eRetainResourcesWhenOff;
+    applyGenerationOptions(options);
+}
+void releaseStreamlineGenerationResources(){
+    std::lock_guard<std::mutex>guard(session.lock);
+    if(session.generationMode!=sl::DLSSGMode::eOff)throw std::runtime_error("Cannot free enabled DLSSG resources");
+    if(!session.mayHaveGenerationResources)return;
+    check(session.freeResources(sl::kFeatureDLSS_G,sl::ViewportHandle(0)),"Free retired DLSSG resources");
+    session.mayHaveGenerationResources=false;session.generatedReported=false;
 }
 void initializeStreamline(void(*log)(unsigned,const char*)noexcept){
     std::lock_guard<std::mutex>guard(session.lock);
@@ -99,6 +187,7 @@ void initializeStreamline(void(*log)(unsigned,const char*)noexcept){
     session.loaded=entry<PFun_slIsFeatureLoaded>("slIsFeatureLoaded");
     session.supported=entry<PFun_slIsFeatureSupported>("slIsFeatureSupported");
     session.featureFunction=entry<PFun_slGetFeatureFunction>("slGetFeatureFunction");
+    session.freeResources=entry<PFun_slFreeResources>("slFreeResources");
     const wchar_t*paths[]={directory.c_str()};
     const sl::Feature features[]={sl::kFeatureDLSS_G,sl::kFeatureReflex,sl::kFeaturePCL};
     sl::Preferences pref{};pref.pathsToPlugins=paths;pref.numPathsToPlugins=1;
@@ -134,6 +223,10 @@ ComPtr<ID3D12Device>bindStreamlineDevice(ID3D12Device*device){
         if(!function)throw std::runtime_error("Streamline returned no DLSSG options function");
         sl::DLSSGOptions options{};options.mode=sl::DLSSGMode::eOff;
         check(reinterpret_cast<PFun_slDLSSGSetOptions*>(function)(sl::ViewportHandle(0),options),"Keep DLSSG disabled");
+        session.generationMode=options.mode;
+        session.appliedOptions=options;
+        session.dlssgOptions=reinterpret_cast<PFun_slDLSSGSetOptions*>(function);
+        session.dlssgState=feature<PFun_slDLSSGGetState>(sl::kFeatureDLSS_G,"slDLSSGGetState");
     }
     if(!unavailable(pclStatus)){
         bool present=false;check(session.loaded(sl::kFeaturePCL,present),"Query PCL plugin");
@@ -149,6 +242,11 @@ ComPtr<ID3D12Device>bindStreamlineDevice(ID3D12Device*device){
         auto*setOptions=feature<PFun_slReflexSetOptions>(sl::kFeatureReflex,"slReflexSetOptions");
         sl::ReflexOptions options{};options.mode=sl::ReflexMode::eOff;
         check(setOptions(options),"Initialize Reflex with low-latency mode off");
+        session.reflexOptions=setOptions;
+        sl::ReflexState state{};
+        session.reflexState=feature<PFun_slReflexGetState>(sl::kFeatureReflex,"slReflexGetState");
+        check(session.reflexState(state),"Query Reflex low-latency availability");
+        session.lowLatencyAvailable=state.lowLatencyAvailable;
         session.sleep=feature<PFun_slReflexSleep>(sl::kFeatureReflex,"slReflexSleep");
     }else if(session.log)session.log(1,"Reflex unsupported; low-latency sleep unavailable");
     if(session.log&&session.marker)session.log(0,session.sleep?"Native Reflex phases ready; low-latency mode off":"Native PCL phases ready; Reflex sleep unsupported");
@@ -171,13 +269,22 @@ std::shared_ptr<const PresentationFrame>acquireStreamlineFrame(uint64_t engineFr
     if(!session.device)return {};
     sl::FrameToken*token=nullptr;check(session.frame(token,nullptr),"Acquire native main-frame token");
     if(!token)throw std::runtime_error("Streamline returned no native main-frame token");
-    return std::make_shared<const PresentationFrame>(PresentationFrame{engineFrame,token,session.marker!=nullptr});
+    return std::make_shared<const PresentationFrame>(PresentationFrame{engineFrame,token,session.marker!=nullptr,session.requested});
 }
 void sleepStreamlineFrame(const PresentationFrame&frame){
     if(!frame.pcl)return;
     PFun_slReflexSleep*sleep=nullptr;
     {std::lock_guard<std::mutex>guard(session.lock);
         if(!frame.sdkToken||frame.markers||!session.marker)throw std::runtime_error("Invalid native Reflex sleep phase");
+        if(frame.fg.enabled&&session.refreshReflex&&session.reflexState){
+            sl::ReflexState state{};check(session.reflexState(state),"Query Reflex availability for FG request");
+            session.lowLatencyAvailable=state.lowLatencyAvailable;session.refreshReflex=false;
+        }
+        const auto mode=session.lowLatencyAvailable&&session.dlssgOptions&&(frame.fg.enabled||session.generationMode!=sl::DLSSGMode::eOff)?sl::ReflexMode::eLowLatency:sl::ReflexMode::eOff;
+        if(session.reflexOptions&&mode!=session.reflexMode){
+            sl::ReflexOptions options{};options.mode=mode;
+            check(session.reflexOptions(options),"Apply native-frame Reflex mode");session.reflexMode=mode;
+        }
         sleep=session.sleep;}
     // The preceding frame must be able to submit/Present while this driver call waits.
     if(sleep)check(sleep(*frame.sdkToken),"Sleep before native input sampling");
@@ -193,7 +300,7 @@ void startStreamlineRender(const PresentationFrame&frame){marker(frame,sl::PCLMa
 void endStreamlineRender(const PresentationFrame&frame){marker(frame,sl::PCLMarker::eRenderSubmitEnd,sl::PCLMarker::eRenderSubmitStart);}
 void markStreamlinePresentStart(const PresentationFrame&frame){marker(frame,sl::PCLMarker::ePresentStart,sl::PCLMarker::eRenderSubmitEnd);}
 void markStreamlinePresentEnd(const PresentationFrame&frame){marker(frame,sl::PCLMarker::ePresentEnd,sl::PCLMarker::ePresentStart);}
-void beginStreamlinePresent(ID3D12Resource*backbuffer,const PresentationFrame*frame,const ScenePresentation*scene){
+void beginStreamlinePresent(ID3D12Resource*backbuffer,unsigned backbuffers,const PresentationFrame*frame,const ScenePresentation*scene){
     std::lock_guard<std::mutex>guard(session.lock);
     auto*hudless=scene?scene->hudless:nullptr;
     const auto*region=scene?&scene->region:nullptr;
@@ -225,6 +332,7 @@ void beginStreamlinePresent(ID3D12Resource*backbuffer,const PresentationFrame*fr
         guideExtent.width=UINT(depth.Width);guideExtent.height=depth.Height;
     }
     if(guides&&!hudless)throw std::runtime_error("Guides submitted without a matching final Scene View");
+    const bool generationReset=configureGeneration(frame,scene,desc,extent,guideExtent,backbuffers);
     if(scene){
         const auto&camera=*scene->camera;
         sl::Constants values{};
@@ -247,7 +355,7 @@ void beginStreamlinePresent(ID3D12Resource*backbuffer,const PresentationFrame*fr
         values.depthInverted=sl::Boolean::eTrue;values.cameraMotionIncluded=sl::Boolean::eTrue;
         values.motionVectors3D=sl::Boolean::eFalse;values.motionVectorsDilated=sl::Boolean::eFalse;
         values.motionVectorsJittered=sl::Boolean::eFalse;values.orthographicProjection=sl::Boolean::eFalse;
-        values.reset=camera.cameraCut||!session.previousScene||scene->sequence!=session.previousSequence?sl::Boolean::eTrue:sl::Boolean::eFalse;
+        values.reset=generationReset||camera.cameraCut||!session.previousScene||scene->sequence!=session.previousSequence?sl::Boolean::eTrue:sl::Boolean::eFalse;
         check(session.constants(values,*token,sl::ViewportHandle(0)),"Submit actual native camera constants");
     }
     // The swapchain proxy supplies the actual resource; this tag specifies its real region.
@@ -263,6 +371,34 @@ void beginStreamlinePresent(ID3D12Resource*backbuffer,const PresentationFrame*fr
     check(session.tag(*token,sl::ViewportHandle(0),tags,4,nullptr),"Tag same-frame scene, depth and motion inputs");
     session.previousScene=scene!=nullptr;if(scene)session.previousSequence=scene->sequence;
     if(hudless)inputStatus(nullptr);
+}
+StreamlineInputCompletion finishStreamlinePresent(){
+    std::lock_guard<std::mutex>guard(session.lock);
+    if(!session.dlssgState)return {};
+    sl::DLSSGState state{};
+    // A null options pointer queries current state without estimating VRAM each frame.
+    check(session.dlssgState(sl::ViewportHandle(0),state,nullptr),"Get last-present DLSSG input completion");
+    session.maxGeneratedFrames=state.numFramesToGenerateMax;session.minDimension=state.minWidthOrHeight;
+    if(session.generationMode!=sl::DLSSGMode::eOff){
+        if(state.status!=sl::DLSSGStatus::eOk)throw std::runtime_error("DLSSG runtime status "+std::to_string(unsigned(state.status)));
+        if(state.numFramesActuallyPresented>1&&!session.generatedReported){
+            session.generatedReported=true;if(session.log)session.log(0,"DLSSG reports additional presented frames");
+        }
+    }
+    const auto value=state.lastPresentInputsProcessingCompletionFenceValue;
+    if(!value){
+        // D3D12's blocking presenting queue is retired separately, including when no SDK point is returned.
+        if(session.generationMode!=sl::DLSSGMode::eOff&&session.previousScene&&
+            session.appliedOptions.queueParallelismMode!=sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue)
+            throw std::runtime_error("Nonblocking DLSSG returned no input completion point for tagged scene inputs");
+        return {};
+    }
+    if(!state.inputsProcessingCompletionFence||value==UINT64_MAX)throw std::runtime_error("Invalid DLSSG input completion fence/value");
+    StreamlineInputCompletion result;result.value=value;
+    const auto hr=static_cast<IUnknown*>(state.inputsProcessingCompletionFence)->QueryInterface(IID_PPV_ARGS(&result.fence));
+    if(FAILED(hr))throw std::runtime_error("DLSSG input completion is not an ID3D12Fence HRESULT "+std::to_string(unsigned(hr)));
+    if(result.fence->GetCompletedValue()==UINT64_MAX)throw std::runtime_error("DLSSG input completion device removed");
+    return result;
 }
 void reportStreamlineInputRejection(const char*reason){
     std::lock_guard<std::mutex>guard(session.lock);

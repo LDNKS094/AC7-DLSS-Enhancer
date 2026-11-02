@@ -216,7 +216,7 @@ void initializeStreamline(void(*log)(unsigned,const char*)noexcept){
     sl::Preferences pref{};pref.pathsToPlugins=paths;pref.numPathsToPlugins=1;
     pref.featuresToLoad=features;pref.numFeaturesToLoad=3;pref.logMessageCallback=&logMessage;
     pref.flags=sl::PreferenceFlags::eDisableCLStateTracking|sl::PreferenceFlags::eUseManualHooking|sl::PreferenceFlags::eUseDXGIFactoryProxy|sl::PreferenceFlags::eUseFrameBasedResourceTagging;
-    pref.engine=sl::EngineType::eCustom;pref.engineVersion="AC7 native NR HDR SR";
+    pref.engine=sl::EngineType::eCustom;pref.engineVersion="AC7 DLSS Enhancer";
     pref.projectId="05882ed0-d4cd-4063-a726-0b4862bad3dc";pref.renderAPI=sl::RenderAPI::eD3D12;
     check(init(pref,sl::kSDKVersion),"Initialize Streamline");session.ready=true;
 }

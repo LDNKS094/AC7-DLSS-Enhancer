@@ -14,6 +14,6 @@
 | `streamline/bin/x64` | 同一归档的正式sl.interposer、sl.common、sl.dlss_g、sl.reflex、sl.pcl及nvngx_dlssg；不使用development运行库 |
 | `downloads` | 原 SDK 下载归档，保留原文件名；不是 CMake 输入，也不据文件名宣称已完成 Streamline 接入 |
 
-本目录不放本项目业务实现。自有核心仍在根 `src/`，ASI 游戏接线在 `development/src/` 和 `development/tools/neutral-asi/`。没有修改模型或 NGX core。
+本目录不放本项目业务实现。全部正式源码在根 `src/`，ASI入口为 `src/plugin.cpp`。没有修改模型或 NGX core。
 
-模型、loader和Streamline运行库二进制、下载归档不进入 Git；它们是本机需要保留的依赖，不能随 build 清理。由用户将模型及上述6个Streamline运行库放在ASI旁的 `AC7NativeModels/`。Streamline仅动态加载签名有效的官方interposer，通过公开接口接线；没有替换游戏目录文件。
+模型、loader和Streamline运行库二进制、下载归档不进入 Git；它们是本机需要保留的依赖，不能随 build 清理。构建脚本将模型及上述6个Streamline运行库放入 `payload/AC7DLSS/`，由安装脚本或用户复制到ASI旁的 `AC7DLSS/`。Streamline仅动态加载签名有效的官方interposer，通过公开接口接线；没有替换游戏目录文件。

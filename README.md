@@ -6,6 +6,19 @@ Adds DLSS neural rendering, super resolution and frame generation to *Ace Combat
 
 Install with [script install](#script-install) or [manual install](#manual-install).
 
+## Preview
+
+<table>
+  <tr>
+    <th>DLSS off</th>
+    <th>DLSS on</th>
+  </tr>
+  <tr>
+    <td><img src="preview/DLSS_Off.png" width="430" alt="DLSS off"></td>
+    <td><img src="preview/DLSS_On.png" width="430" alt="DLSS on"></td>
+  </tr>
+</table>
+
 ## How it works
 
 The mod takes scene color, depth, motion vectors and camera parameters from the game's existing render pipeline and passes them to NVIDIA neural rendering (NR), super resolution (SR) and frame generation (FG), then returns the result to the game. When all three are enabled, the order is **NR → SR → FG**: NR first restores HDR color on the low-resolution scene, SR then reconstructs the target resolution, and after the game composites the frame, FG generates intermediate frames from game frames and their motion vectors before presentation.

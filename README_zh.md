@@ -6,6 +6,19 @@
 
 安装方式可选[脚本安装](#脚本安装)或[手动安装](#手动安装)。
 
+## 预览对比
+
+<table>
+  <tr>
+    <th>DLSS 关闭</th>
+    <th>DLSS 开启</th>
+  </tr>
+  <tr>
+    <td><img src="preview/DLSS_Off.png" width="430" alt="DLSS 关闭"></td>
+    <td><img src="preview/DLSS_On.png" width="430" alt="DLSS 开启"></td>
+  </tr>
+</table>
+
 ## 工作原理
 
 模组在游戏原有的渲染流程中取出场景颜色、深度、运动矢量和相机参数，交给 NVIDIA 的神经渲染（NR）、超分辨率（SR）和帧生成（FG）处理，再把结果交回游戏。同时启用时，顺序为 **NR → SR → FG**：NR 先在低分辨率场景上恢复 HDR 颜色，SR 再重建到目标分辨率，由游戏合成后，FG 再在最终呈现前依据游戏帧及其运动矢量生成中间帧。
